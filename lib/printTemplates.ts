@@ -1,0 +1,144 @@
+const formatRupiah = (n: number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(n || 0);
+
+export const generatePrintHtml = (type: 'THERMAL' | 'FAKTUR' | 'DO', settings: any, sale: any, items: any[]) => {
+  const shop = settings || { shop_name: 'TOKO', shop_address: '', shop_phone: '' };
+  
+  // SHARED STYLES (Based on your Component Styles)
+  const commonStyles = `
+    <style>
+      body { font-family: 'Courier New', Courier, monospace; color: #1E293B; margin: 0; padding: 0; }
+      .text-center { text-align: center; }
+      .text-right { text-align: right; }
+      .bold { font-weight: bold; }
+      .italic { font-style: italic; }
+      table { width: 100%; border-collapse: collapse; }
+      .divider { border-top: 1px dashed #000; margin: 10px 0; }
+      
+      /* THERMAL STYLE */
+      .thermal-container { width: 80mm; padding: 5mm; margin: auto; }
+      .thermal-brand { font-size: 20px; font-weight: 900; }
+      .thermal-address { font-size: 12px; }
+      
+      /* DOT MATRIX STYLE (FAKTUR & DO) */
+      .dot-matrix { width: 210mm; min-height: 140mm; padding: 10mm; border: 1px solid #CBD5E1; margin: auto; position: relative; }
+      .doc-header { display: flex; justify-content: space-between; border-bottom: 2px solid #1E293B; padding-bottom: 10px; margin-bottom: 20px; }
+      .doc-type { font-size: 28px; font-weight: 900; letter-spacing: 2px; }
+      .table-bordered { border: 1px solid #1E293B; }
+      .table-bordered th { background: #F8FAFC; border-bottom: 1px solid #1E293B; padding: 8px; font-size: 12px; }
+      .table-bordered td { padding: 8px; font-size: 12px; border-bottom: 1px solid #E2E8F0; }
+      .signature-row { display: flex; justify-content: space-between; margin-top: 40px; }
+      .sign-area { width: 150px; text-align: center; }
+      .sign-line { border-bottom: 1px solid #000; margin-top: 50px; }
+    </style>
+  `;
+
+  if (type === 'THERMAL') {
+    return `
+      <html>
+        ${commonStyles}
+        <body>
+          <div class="thermal-container">
+            <div class="text-center">
+              <div class="thermal-brand">${shop.shop_name}</div>
+              <div class="thermal-address">${shop.shop_address}</div>
+              <div class="thermal-address">Telp: ${shop.shop_phone}</div>
+            </div>
+            <div class="divider"></div>
+            <div style="font-size: 12px; margin-bottom: 5px;">
+              No: #${sale.id} | ${new Date(sale.created_at).toLocaleString()}
+            </div>
+            <table>
+              ${items.map(i => `
+                <tr>
+                  <td style="font-size: 12px;">${i.quantity}x ${i.item_name}</td>
+                  <td class="text-right" style="font-size: 12px;">${formatRupiah(i.price_at_sale * i.quantity)}</td>
+                </tr>
+              `).join('')}
+            </table>
+            <div class="divider"></div>
+            <div style="display: flex; justify-content: space-between; font-weight: bold;">
+              <span>TOTAL</span>
+              <span>${formatRupiah(sale.total_amount)}</span>
+            </div>
+            <div class="divider"></div>
+            <div class="text-center italic" style="font-size: 11px;">${shop.thermal_footer}</div>
+          </div>
+        </body>
+      </html>
+    `;
+  }
+
+  const isDO = type === 'DO';
+  const themeColor = isDO ? '#059669' : '#1E40AF';
+  const title = isDO ? 'SURAT JALAN' : 'FAKTUR';
+
+  return `
+    <html>
+      ${commonStyles}
+      <body>
+        <div class="dot-matrix" style="border-color: ${themeColor}">
+          <div class="doc-header">
+            <div>
+              <div style="font-size: 22px; font-weight: 900;">${shop.shop_name}</div>
+              <div style="font-size: 12px;">${shop.shop_address}</div>
+              <div style="font-size: 12px;">WA: ${shop.shop_phone}</div>
+            </div>
+            <div class="text-right">
+              <div class="doc-type" style="color: ${themeColor}">${title}</div>
+              <div style="font-size: 11px; font-weight: bold;">No: ${isDO ? 'DO' : 'INV'}/${sale.id}</div>
+              <div style="font-size: 11px;">Tgl: ${new Date(sale.created_at).toLocaleDateString()}</div>
+              <div style="font-size: 11px;">Kepada: ${sale.customer_name}</div>
+            </div>
+          </div>
+
+          <table class="table-bordered">
+            <thead>
+              <tr>
+                <th width="30">No</th>
+                <th align="left">Nama Barang</th>
+                <th width="80">Qty</th>
+                ${!isDO ? `<th width="120" align="right">Harga</th><th width="120" align="right">Subtotal</th>` : `<th width="100">Satuan</th>`}
+              </tr>
+            </thead>
+            <tbody>
+              ${items.map((i, idx) => `
+                <tr>
+                  <td class="text-center">${idx + 1}</td>
+                  <td>${i.item_name}</td>
+                  <td class="text-center">${i.quantity}</td>
+                  ${!isDO ? `
+                    <td class="text-right">${formatRupiah(i.price_at_sale)}</td>
+                    <td class="text-right">${formatRupiah(i.price_at_sale * i.quantity)}</td>
+                  ` : `
+                    <td class="text-center">-</td>
+                  `}
+                </tr>
+              `).join('')}
+              <tr style="height: 100px;"><td></td><td></td><td></td>${!isDO ? '<td></td><td></td>' : '<td></td>'}</tr>
+            </tbody>
+          </table>
+
+          <div style="display: flex; margin-top: 15px;">
+            <div style="flex: 1.5; font-size: 11px; font-style: italic;">
+              Ket: ${isDO ? shop.do_footer : shop.invoice_footer}
+            </div>
+            ${!isDO ? `
+              <div style="flex: 1; text-align: right;">
+                <div style="display: flex; justify-content: flex-end; gap: 20px;">
+                  <span class="bold">TOTAL</span>
+                  <span class="bold" style="font-size: 16px;">${formatRupiah(sale.total_amount)}</span>
+                </div>
+              </div>
+            ` : ''}
+          </div>
+
+          <div class="signature-row">
+            <div class="sign-area"><div>Penerima</div><div class="sign-line"></div></div>
+            <div class="sign-area"><div>${isDO ? 'Sopir' : 'Gudang'}</div><div class="sign-line"></div></div>
+            <div class="sign-area"><div>Hormat Kami</div><div class="sign-line"></div></div>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+};

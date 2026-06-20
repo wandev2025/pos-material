@@ -34,7 +34,9 @@
             "imageWidth": 76
           }
         }
-      ]
+      ],
+      "expo-asset",
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true,
