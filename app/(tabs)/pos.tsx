@@ -582,7 +582,7 @@ export default function UnifiedPOSHub() {
                     <Text style={styles.hPm}>{item.payment_method}</Text>
                   </View>
                 </View>
-                <div style={{ alignItems: 'flex-end' }}>
+                <View style={{ alignItems: 'flex-end' }}>
                   <Text style={[styles.mono, styles.hPrice]}>{formatRupiah(item.total_amount)}</Text>
                   <View style={styles.hActions}>
                     {(profile?.role === 'OWNER' || profile?.role === 'ADMIN') && (
@@ -607,7 +607,7 @@ export default function UnifiedPOSHub() {
                       <Ionicons name="print-outline" size={18} color="#16A34A" />
                     </TouchableOpacity>
                   </View>
-                </div>
+                </View>
               </View>
             ))}
           </View>

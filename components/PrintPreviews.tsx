@@ -82,7 +82,7 @@ export const InvoicePreview = ({ settings }: { settings: PrintSettings }) => (
 
 export const DeliveryOrderPreview = ({ settings }: { settings: PrintSettings }) => (
   <View style={[styles.dotMatrixPaper, { borderColor: '#059669' }]}>
-    <div style={{ display: 'contents' }}>
+    <>
       <View style={styles.docHeader}>
         <View style={{ flex: 1 }}>
           <Text style={styles.docBrand}>{settings.shop_name}</Text>
@@ -116,7 +116,7 @@ export const DeliveryOrderPreview = ({ settings }: { settings: PrintSettings }) 
         <SignArea title="Sopir" />
         <SignArea title="Gudang" />
       </View>
-    </div>
+    </>
   </View>
 );
 
