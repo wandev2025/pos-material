@@ -111,14 +111,16 @@ export default function LaporanScreen() {
   const maxRev = useMemo(() => Math.max(1, ...daily.map((d) => d.total)), [daily]);
 
   const byGroup = (key: 'payment_method' | 'employee_name') => {
-    const m: Record<string, { total: number; count: number }> = {};
+    // Merge case-insensitively so "CASH" and "Cash" don't show as two rows.
+    const m: Record<string, { label: string; total: number; count: number }> = {};
     sales.forEach((s) => {
-      const g = (s as any)[key] || '—';
-      m[g] = m[g] || { total: 0, count: 0 };
-      m[g].total += s.total_amount || 0;
-      m[g].count += 1;
+      const raw = String((s as any)[key] ?? '').trim() || '—';
+      const norm = raw.toLowerCase();
+      if (!m[norm]) m[norm] = { label: raw, total: 0, count: 0 };
+      m[norm].total += s.total_amount || 0;
+      m[norm].count += 1;
     });
-    return Object.entries(m).map(([label, v]) => ({ label, ...v })).sort((a, b) => b.total - a.total);
+    return Object.values(m).sort((a, b) => b.total - a.total);
   };
   const byPayment = useMemo(() => byGroup('payment_method'), [sales]);
   const byCashier = useMemo(() => byGroup('employee_name'), [sales]);
