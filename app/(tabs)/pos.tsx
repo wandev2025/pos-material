@@ -431,7 +431,7 @@ export default function UnifiedPOSHub() {
   };
 
   // --- SUB-COMPONENTS ---
-  const POSInputTable = () => (
+  const renderInputTable = () => (
     <View style={styles.card}>
       <Text style={styles.sectionTitle}>DETAIL PESANAN</Text>
       <View style={styles.tableHead}>
@@ -478,7 +478,7 @@ export default function UnifiedPOSHub() {
     </View>
   );
 
-  const CheckoutPanel = () => (
+  const renderCheckout = () => (
     <View style={styles.receiptCard as ViewStyle}>
       <Text style={styles.sectionTitle}>PEMBAYARAN</Text>
       
@@ -559,10 +559,10 @@ export default function UnifiedPOSHub() {
         {activeTab === 'input' ? (
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={isDesktop ? styles.desktopLayout : styles.mobileLayout}>
             <View style={isDesktop ? { flex: 2 } : { width: '100%' }}>
-              <POSInputTable />
+              {renderInputTable()}
             </View>
             <View style={isDesktop ? { flex: 1, marginLeft: 20 } : { width: '100%' }}>
-              <CheckoutPanel />
+              {renderCheckout()}
             </View>
           </KeyboardAvoidingView>
         ) : (
@@ -623,8 +623,8 @@ export default function UnifiedPOSHub() {
             </TouchableOpacity>
           </View>
           <ScrollView contentContainerStyle={styles.scrollContent}>
-            <POSInputTable />
-            <CheckoutPanel />
+            {renderInputTable()}
+            {renderCheckout()}
             <TouchableOpacity style={[styles.payBtn, { backgroundColor: '#0F172A', marginBottom: 40 }]} onPress={handleUpdateSale}>
               <Text style={styles.payBtnText}>SIMPAN PERUBAHAN</Text>
             </TouchableOpacity>
