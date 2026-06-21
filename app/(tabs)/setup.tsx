@@ -306,7 +306,7 @@ node -e "const express=require('express');const cors=require('cors');const ptp=r
         <SubBtn id="PAYMENT" label="Metode Bayar" icon="credit-card" active={activeTab} set={setActiveTab} />
       </View>
 
-      <ScrollView style={[styles.content, !isDesktop && styles.contentMobile]}>
+      <ScrollView style={[styles.content, !isDesktop && styles.contentMobile]} contentContainerStyle={!isDesktop ? { paddingBottom: 120 } : undefined}>
         {loading && <ActivityIndicator color="#DC2626" style={{marginBottom: 20}} />}
 
         {/* TAB: INFO */}

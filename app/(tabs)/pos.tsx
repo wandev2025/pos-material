@@ -6,7 +6,9 @@ import {
   Modal, Platform, ScrollView, StyleSheet, Text,
   TextInput, TouchableOpacity, useWindowDimensions, View, ViewStyle
 } from 'react-native';
+import Animated, { FadeInDown, FadeOutUp, useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 import { DeliveryOrderPreview, InvoicePreview, ThermalPreview } from '../../components/PrintPreviews';
+import PressableScale from '../../components/PressableScale';
 import { parseNum } from '../../lib/number';
 import { useOnline } from '../../lib/offline/OfflineContext';
 import type { DocType, PrintConfig } from '../../lib/printing';
@@ -142,13 +144,31 @@ export default function UnifiedPOSHub() {
   const [editingSale, setEditingSale] = useState<Sale | null>(null);
   const [previewType, setPreviewType] = useState<DocType | null>(null);
 
+  // Riwayat (history) filters + row expansion
+  const [histStatus, setHistStatus] = useState<'ALL' | 'PAID' | 'PARTIAL' | 'UNPAID'>('ALL');
+  const [histPreset, setHistPreset] = useState<'today' | '7d' | '30d' | 'all'>('all');
+  const [histSearch, setHistSearch] = useState('');
+  const [histLimit, setHistLimit] = useState(50);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [expandedItems, setExpandedItems] = useState<Record<number, SaleItem[]>>({});
+  const histTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     loadInitialData();
   }, []);
 
   useEffect(() => {
     if (activeTab === 'history') loadHistory();
-  }, [activeTab]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, histStatus, histPreset, histLimit]);
+
+  // Debounced reload when the search text changes.
+  useEffect(() => {
+    if (activeTab !== 'history') return;
+    if (histTimer.current) clearTimeout(histTimer.current);
+    histTimer.current = setTimeout(() => loadHistory(), 300);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [histSearch]);
 
   const loadInitialData = async () => {
     try {
@@ -172,11 +192,42 @@ export default function UnifiedPOSHub() {
 
   const loadHistory = async () => {
     setLoading(true);
-    const { data, error } = await supabase.from('sales').select('*').order('created_at', { ascending: false }).limit(50);
+    let q = supabase.from('sales').select('*').order('created_at', { ascending: false });
+    if (histPreset !== 'all') {
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      if (histPreset === '7d') start.setDate(start.getDate() - 6);
+      else if (histPreset === '30d') start.setDate(start.getDate() - 29);
+      q = q.gte('created_at', start.toISOString());
+    }
+    if (histStatus !== 'ALL') q = q.eq('status', histStatus);
+    const term = histSearch.trim();
+    if (term) q = q.ilike('customer_name', `%${term}%`);
+    const { data, error } = await q.limit(histLimit);
     if (error) Alert.alert("Error", "Gagal memuat riwayat transaksi");
     if (data) setSales(data as Sale[]);
     setLoading(false);
   };
+
+  // Expand a transaction to reveal its line items (fetched once, then cached).
+  const toggleExpand = async (sale: Sale) => {
+    if (expandedId === sale.id) { setExpandedId(null); return; }
+    setExpandedId(sale.id);
+    if (!expandedItems[sale.id]) {
+      const { data } = await supabase.from('sale_items').select('*').eq('sale_id', sale.id);
+      setExpandedItems(prev => ({ ...prev, [sale.id]: (data as SaleItem[]) || [] }));
+    }
+  };
+
+  const histRemaining = (s: Sale) =>
+    s.status !== 'PAID' ? Math.max(0, (s.total_amount || 0) - (s.down_payment || 0) - ((s as any).amount_returned || 0)) : 0;
+
+  const histSummary = useMemo(() => ({
+    count: sales.length,
+    total: sales.reduce((a, s) => a + (s.total_amount || 0), 0),
+    piutang: sales.reduce((a, s) => a + histRemaining(s), 0),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [sales]);
 
   // --- CALCULATIONS ---
   const subtotal = useMemo(() =>
@@ -184,6 +235,15 @@ export default function UnifiedPOSHub() {
   [rows]);
   const txDiscount = Math.min(subtotal, Math.round(parseNum(discountStr)));
   const currentTotal = Math.max(0, subtotal - txDiscount);
+
+  // Subtle pulse on the grand total whenever it changes.
+  const totalScale = useSharedValue(1);
+  const totalAnim = useAnimatedStyle(() => ({ transform: [{ scale: totalScale.value }] }));
+  const firstTotalRef = useRef(true);
+  useEffect(() => {
+    if (firstTotalRef.current) { firstTotalRef.current = false; return; }
+    totalScale.value = withSequence(withTiming(1.07, { duration: 110 }), withTiming(1, { duration: 170 }));
+  }, [currentTotal]);
   
   const cashReceived = Math.round(parseNum(cashReceivedStr));
   const downPayment = Math.round(parseNum(downPaymentStr));
@@ -656,13 +716,13 @@ export default function UnifiedPOSHub() {
   const renderMoneyPad = (value: string, setValue: (s: string) => void) => (
     <View style={styles.moneyPad}>
       {DENOMS.map(d => (
-        <TouchableOpacity key={d} style={styles.denomBtn} onPress={() => setValue(String(parseNum(value) + d))}>
+        <PressableScale key={d} style={styles.denomBtn} onPress={() => setValue(String(parseNum(value) + d))}>
           <Text style={styles.denomText}>{d / 1000}rb</Text>
-        </TouchableOpacity>
+        </PressableScale>
       ))}
-      <TouchableOpacity style={[styles.denomBtn, styles.denomReset]} onPress={() => setValue('0')}>
+      <PressableScale style={[styles.denomBtn, styles.denomReset]} onPress={() => setValue('0')}>
         <Text style={styles.denomResetText}>RESET</Text>
-      </TouchableOpacity>
+      </PressableScale>
     </View>
   );
 
@@ -739,10 +799,10 @@ export default function UnifiedPOSHub() {
           </View>
         </TouchableOpacity>
         {showDiscount && (
-          <View style={{ marginTop: 8 }}>
+          <Animated.View entering={FadeInDown.duration(200)} exiting={FadeOutUp.duration(150)} style={{ marginTop: 8 }}>
             <TextInput style={[styles.mono, styles.input]} keyboardType="numeric" value={discountStr} onChangeText={setDiscountStr} placeholder="0" />
             {renderMoneyPad(discountStr, setDiscountStr)}
-          </View>
+          </Animated.View>
         )}
       </View>
 
@@ -750,7 +810,7 @@ export default function UnifiedPOSHub() {
 
       <View style={styles.rowBetween}>
         <Text style={styles.totalLabel}>TOTAL</Text>
-        <Text style={[styles.mono, styles.grandTotalText]}>{formatRupiah(currentTotal)}</Text>
+        <Animated.Text style={[styles.mono, styles.grandTotalText, totalAnim]}>{formatRupiah(currentTotal)}</Animated.Text>
       </View>
 
       <View style={{ marginTop: 15 }}>
@@ -782,11 +842,11 @@ export default function UnifiedPOSHub() {
         )}
       </View>
 
-      <TouchableOpacity onPress={handleCheckout} disabled={loading || !online} style={{ marginTop: 25 }}>
+      <PressableScale onPress={handleCheckout} disabled={loading || !online} style={{ marginTop: 25 }}>
         <LinearGradient colors={online ? ['#DC2626', '#991B1B'] : ['#CBD5E1', '#94A3B8']} style={styles.payBtn}>
           {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.payBtnText}>PROSES TRANSAKSI</Text>}
         </LinearGradient>
-      </TouchableOpacity>
+      </PressableScale>
       {!online && <Text style={styles.offlineHint}>Tidak ada koneksi — transaksi dinonaktifkan sementara.</Text>}
     </View>
   );
@@ -804,7 +864,7 @@ export default function UnifiedPOSHub() {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={[styles.scrollContent, !isDesktop && { paddingBottom: 120 }]} keyboardShouldPersistTaps="handled">
         {activeTab === 'input' ? (
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={isDesktop ? styles.desktopLayout : styles.mobileLayout}>
             <View style={isDesktop ? { flex: 2 } : { width: '100%' }}>
@@ -816,49 +876,105 @@ export default function UnifiedPOSHub() {
           </KeyboardAvoidingView>
         ) : (
           <View style={styles.historyContainer}>
-            <Text style={styles.sectionTitle}>TRANSAKSI TERBARU</Text>
-            {sales.map((item) => (
-              <View key={item.id} style={styles.historyCard}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.hName}>{item.customer_name}</Text>
-                  <Text style={styles.hDate}>{new Date(item.created_at).toLocaleString('id-ID')}</Text>
-                  <View style={styles.hMeta}>
-                    <Text style={[styles.badge, 
-                      item.status === 'PAID' ? styles.badgePaid : 
-                      item.status === 'PARTIAL' ? styles.badgePartial : styles.badgeUnpaid]}>
-                      {item.status}
-                    </Text>
-                    <Text style={styles.hPm}>{item.payment_method}</Text>
-                  </View>
-                </View>
-                <View style={{ alignItems: 'flex-end' }}>
-                  <Text style={[styles.mono, styles.hPrice]}>{formatRupiah(item.total_amount)}</Text>
-                  <View style={styles.hActions}>
-                    {profile?.role !== 'STAFF' && (
-                      <>
-                        <TouchableOpacity style={styles.iconBtn} onPress={() => handleEditSale(item)}>
-                          <Ionicons name="create-outline" size={18} color="#0F172A" />
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.iconBtn} onPress={() => handleDeleteSale(item)}>
-                          <Ionicons name="trash-outline" size={18} color="#DC2626" />
-                        </TouchableOpacity>
-                      </>
-                    )}
-                    <TouchableOpacity 
-                      style={styles.reprintBtn} 
-                      onPress={async () => {
-                          setLastSale(item);
-                          const {data} = await supabase.from('sale_items').select('*').eq('sale_id', item.id);
-                          setLastSaleItems(data as SaleItem[] || []);
-                          setPrintModal(true);
-                      }}
-                    >
-                      <Ionicons name="print-outline" size={18} color="#16A34A" />
-                    </TouchableOpacity>
-                  </View>
-                </View>
+            <View style={styles.histSearch}>
+              <Ionicons name="search" size={18} color="#94A3B8" />
+              <TextInput style={styles.histSearchInput} placeholder="Cari pelanggan..." value={histSearch} onChangeText={setHistSearch} />
+              {histSearch.length > 0 && (
+                <TouchableOpacity onPress={() => setHistSearch('')}><Ionicons name="close-circle" size={18} color="#CBD5E1" /></TouchableOpacity>
+              )}
+            </View>
+
+            <Text style={styles.histFilterLabel}>Status</Text>
+            <View style={styles.histFilters}>
+              {([['ALL', 'Semua'], ['PAID', 'Lunas'], ['PARTIAL', 'Sebagian'], ['UNPAID', 'Belum']] as const).map(([k, label]) => (
+                <TouchableOpacity key={k} onPress={() => setHistStatus(k)} style={[styles.histChip, histStatus === k && styles.histChipActive]}>
+                  <Text style={[styles.histChipText, histStatus === k && styles.histChipTextActive]}>{label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <Text style={styles.histFilterLabel}>Tanggal</Text>
+            <View style={styles.histFilters}>
+              {([['today', 'Hari Ini'], ['7d', '7 Hari'], ['30d', '30 Hari'], ['all', 'Semua']] as const).map(([k, label]) => (
+                <TouchableOpacity key={k} onPress={() => setHistPreset(k)} style={[styles.histChip, histPreset === k && styles.histDateActive]}>
+                  <Text style={[styles.histChipText, histPreset === k && styles.histChipTextActive]}>{label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <View style={styles.histSummary}>
+              <View style={styles.histSummaryItem}><Text style={styles.histSummaryLabel}>TRANSAKSI</Text><Text style={styles.histSummaryVal}>{histSummary.count}</Text></View>
+              <View style={styles.histSummaryItem}><Text style={styles.histSummaryLabel}>TOTAL</Text><Text style={[styles.mono, styles.histSummaryVal]} numberOfLines={1} adjustsFontSizeToFit>{formatRupiah(histSummary.total)}</Text></View>
+              <View style={styles.histSummaryItem}><Text style={styles.histSummaryLabel}>PIUTANG</Text><Text style={[styles.mono, styles.histSummaryVal, { color: '#B45309' }]} numberOfLines={1} adjustsFontSizeToFit>{formatRupiah(histSummary.piutang)}</Text></View>
+            </View>
+
+            {loading ? (
+              <ActivityIndicator style={{ marginTop: 30 }} color="#DC2626" />
+            ) : sales.length === 0 ? (
+              <View style={styles.histEmpty}>
+                <Ionicons name="receipt-outline" size={40} color="#CBD5E1" />
+                <Text style={styles.histEmptyText}>Belum ada transaksi.</Text>
               </View>
-            ))}
+            ) : (
+              sales.map((item, i) => {
+                const expanded = expandedId === item.id;
+                const remaining = histRemaining(item);
+                const strip = item.status === 'PAID' ? '#16A34A' : item.status === 'PARTIAL' ? '#F59E0B' : '#DC2626';
+                return (
+                  <Animated.View key={item.id} entering={FadeInDown.duration(200).delay(Math.min(i, 8) * 25)} style={styles.historyCard}>
+                    <View style={[styles.histStrip, { backgroundColor: strip }]} />
+                    <TouchableOpacity activeOpacity={0.7} onPress={() => toggleExpand(item)} style={styles.histHead}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.hName}>{item.customer_name}</Text>
+                        <Text style={styles.hDate}>{new Date(item.created_at).toLocaleString('id-ID')}</Text>
+                        <View style={styles.hMeta}>
+                          <Text style={[styles.badge, item.status === 'PAID' ? styles.badgePaid : item.status === 'PARTIAL' ? styles.badgePartial : styles.badgeUnpaid]}>{item.status}</Text>
+                          <Text style={styles.hPm}>{item.payment_method}</Text>
+                        </View>
+                      </View>
+                      <View style={{ alignItems: 'flex-end' }}>
+                        <Text style={[styles.mono, styles.hPrice]}>{formatRupiah(item.total_amount)}</Text>
+                        {remaining > 0 && <Text style={styles.hRemaining}>Sisa {formatRupiah(remaining)}</Text>}
+                        <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color="#94A3B8" style={{ marginTop: 4 }} />
+                      </View>
+                    </TouchableOpacity>
+                    {expanded && (
+                      <View style={styles.histDetail}>
+                        {(expandedItems[item.id] || []).map((it, idx) => (
+                          <View key={idx} style={styles.histDetailRow}>
+                            <Text style={styles.histDetailName} numberOfLines={1}>{it.quantity}× {it.item_name}</Text>
+                            <Text style={[styles.mono, styles.histDetailVal]}>{formatRupiah(it.price_at_sale * it.quantity)}</Text>
+                          </View>
+                        ))}
+                        <View style={styles.histDetailActions}>
+                          {profile?.role !== 'STAFF' && (
+                            <>
+                              <TouchableOpacity style={styles.histActBtn} onPress={() => handleEditSale(item)}>
+                                <Ionicons name="create-outline" size={16} color="#0F172A" />
+                                <Text style={styles.histActText}>Edit</Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity style={styles.histActBtn} onPress={() => handleDeleteSale(item)}>
+                                <Ionicons name="trash-outline" size={16} color="#DC2626" />
+                                <Text style={[styles.histActText, { color: '#DC2626' }]}>Hapus</Text>
+                              </TouchableOpacity>
+                            </>
+                          )}
+                          <TouchableOpacity style={styles.histActBtn} onPress={async () => { setLastSale(item); const { data } = await supabase.from('sale_items').select('*').eq('sale_id', item.id); setLastSaleItems(data as SaleItem[] || []); setPrintModal(true); }}>
+                            <Ionicons name="print-outline" size={16} color="#16A34A" />
+                            <Text style={[styles.histActText, { color: '#16A34A' }]}>Cetak</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    )}
+                  </Animated.View>
+                );
+              })
+            )}
+
+            {!loading && sales.length >= histLimit && (
+              <TouchableOpacity style={styles.histLoadMore} onPress={() => setHistLimit(l => l + 50)}>
+                <Text style={styles.histLoadMoreText}>MUAT LEBIH BANYAK</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
       </ScrollView>
@@ -1016,7 +1132,34 @@ const styles = StyleSheet.create({
   payBtn: { paddingVertical: 16, borderRadius: 12, alignItems: 'center' },
   payBtnText: { color: '#FFF', fontWeight: '900', fontSize: 15, letterSpacing: 1 },
   historyContainer: { width: '100%' },
-  historyCard: { backgroundColor: '#FFF', padding: 18, borderRadius: 12, marginBottom: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: '#FEE2E2' },
+  historyCard: { backgroundColor: '#FFF', borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: '#FEE2E2', overflow: 'hidden', position: 'relative' },
+  histStrip: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4 },
+  histHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, paddingLeft: 18 },
+  histDetail: { paddingHorizontal: 18, paddingBottom: 14, borderTopWidth: 1, borderTopColor: '#F1F5F9', paddingTop: 10 },
+  histDetailRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 5 },
+  histDetailName: { flex: 1, fontSize: 13, color: '#334155', marginRight: 10 },
+  histDetailVal: { fontSize: 13, fontWeight: '700', color: '#0F172A' },
+  histDetailActions: { flexDirection: 'row', gap: 8, marginTop: 12 },
+  histActBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0' },
+  histActText: { fontSize: 12, fontWeight: '700', color: '#0F172A' },
+  hRemaining: { fontSize: 11, color: '#B45309', fontWeight: '700', marginTop: 2 },
+  histSearch: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#FFF', borderRadius: 12, paddingHorizontal: 14, height: 46, borderWidth: 1, borderColor: '#FEE2E2', marginBottom: 12 },
+  histSearchInput: { flex: 1, fontSize: 14, color: '#0F172A', outlineStyle: 'none' as any },
+  histFilters: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
+  histFilterLabel: { fontSize: 10, fontWeight: '800', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6, marginTop: 2 },
+  histChip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 18, backgroundColor: '#FFF', borderWidth: 1, borderColor: '#FEE2E2' },
+  histChipActive: { backgroundColor: '#DC2626', borderColor: '#DC2626' },
+  histDateActive: { backgroundColor: '#0F172A', borderColor: '#0F172A' },
+  histChipText: { fontSize: 12, fontWeight: '700', color: '#64748B' },
+  histChipTextActive: { color: '#FFF' },
+  histSummary: { flexDirection: 'row', gap: 8, marginBottom: 14 },
+  histSummaryItem: { flex: 1, backgroundColor: '#FFF', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#FEE2E2' },
+  histSummaryLabel: { fontSize: 9, fontWeight: '800', color: '#94A3B8', marginBottom: 4 },
+  histSummaryVal: { fontSize: 14, fontWeight: '900', color: '#0F172A' },
+  histEmpty: { alignItems: 'center', paddingVertical: 50, gap: 10 },
+  histEmptyText: { color: '#94A3B8', fontWeight: '600' },
+  histLoadMore: { alignItems: 'center', paddingVertical: 14, marginTop: 4 },
+  histLoadMoreText: { color: '#DC2626', fontWeight: '800', fontSize: 12, letterSpacing: 0.5 },
   hName: { fontWeight: '800', fontSize: 15, color: '#0F172A' },
   hDate: { fontSize: 10, color: '#94A3B8', marginTop: 2 },
   hPrice: { fontSize: 15, fontWeight: '700', color: '#0F172A' },

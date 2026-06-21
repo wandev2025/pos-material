@@ -360,7 +360,7 @@ export default function PelangganScreen() {
         {/* Credit notas */}
         <Text style={styles.sectionTitle}>NOTA BELUM LUNAS</Text>
         {notaRows.length === 0 ? (
-          <Text style={styles.emptyInline}>Tidak ada nota tertunggak. 🎉</Text>
+          <Text style={styles.emptyInline}>Tidak ada nota tertunggak.</Text>
         ) : (
           notaRows.map(n => (
             <View key={n.sale.id} style={styles.notaCard}>

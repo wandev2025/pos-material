@@ -2,6 +2,7 @@ import { Feather } from '@expo/vector-icons';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -28,6 +29,7 @@ const computeStatus = (total: number, paid: number): 'PAID' | 'PARTIAL' | 'UNPAI
 
 // --- TYPES ---
 interface Supplier { id: number; name: string; phone?: string; address?: string; }
+interface Metric { id: number; unit_name: string; }
 interface InventoryItem { id: number; item_name: string; quantity: number; price: number; cost?: number; }
 interface PurchaseRow { _id: string; item: InventoryItem | null; query: string; qty: string; cost: string; total: string; }
 interface Purchase {
@@ -57,6 +59,13 @@ export default function PembelianScreen() {
   const [saving, setSaving] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
+  const [metrics, setMetrics] = useState<Metric[]>([]);
+
+  // --- NEW ITEM (inline create from a purchase row) ---
+  const [newItemFor, setNewItemFor] = useState<string | null>(null);
+  const [niName, setNiName] = useState('');
+  const [niUnit, setNiUnit] = useState('');
+  const [niPrice, setNiPrice] = useState('');
 
   // --- SUPPLIER FORM ---
   const [supplierQuery, setSupplierQuery] = useState('');
@@ -76,12 +85,14 @@ export default function PembelianScreen() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [supRes, purRes] = await Promise.all([
+      const [supRes, purRes, metRes] = await Promise.all([
         supabase.from('suppliers').select('*').order('name'),
         supabase.from('purchases').select('*').order('created_at', { ascending: false }).limit(50),
+        supabase.from('metrics').select('*').order('unit_name'),
       ]);
       if (supRes.data) setSuppliers(supRes.data as Supplier[]);
       if (purRes.data) setPurchases(purRes.data as Purchase[]);
+      if (metRes.data) setMetrics(metRes.data as Metric[]);
     } catch (e) { console.error(e); }
     setLoading(false);
   };
@@ -142,6 +153,38 @@ export default function PembelianScreen() {
     });
     setActiveRowId(null);
     setItemResults([]);
+  };
+
+  // Inline-create an inventory item that isn't catalogued yet, then attach it to
+  // the row so the purchase can receive it in one flow (qty + cost set on submit).
+  const openNewItem = (rowId: string) => {
+    const q = (rows.find(r => r._id === rowId)?.query || '').trim();
+    setNewItemFor(rowId);
+    setNiName(q);
+    setNiUnit(metrics[0]?.id ? String(metrics[0].id) : '');
+    setNiPrice('');
+    setActiveRowId(null);
+    setItemResults([]);
+  };
+
+  const handleCreateItem = async () => {
+    if (!newItemFor) return;
+    if (!niName.trim()) return Alert.alert('Validasi', 'Nama barang wajib diisi.');
+    if (!niUnit) return Alert.alert('Validasi', 'Pilih satuan barang.');
+    setSaving(true);
+    const { data, error } = await supabase.from('inventory').insert([{
+      item_name: niName.trim(),
+      metric_id: parseInt(niUnit),
+      price: Math.round(parseNum(niPrice)),
+      min_stock: 5,
+      quantity: 0,
+      allow_preorder: false,
+    }]).select('id, item_name, quantity, price, cost').single();
+    setSaving(false);
+    if (error) return Alert.alert('Gagal', error.message);
+    const rowId = newItemFor;
+    setNewItemFor(null);
+    selectInvItem(data as InventoryItem, rowId); // attaches to the row + appends a fresh one
   };
 
   const updateRow = (rowId: string, field: 'qty' | 'cost', val: string) => {
@@ -242,16 +285,23 @@ export default function PembelianScreen() {
   // The item-search results dropdown — identical for the desktop row and the
   // mobile card, so render it from one place.
   const renderItemDropdown = (rowId: string) => {
-    if (activeRowId !== rowId || itemResults.length === 0) return null;
+    if (activeRowId !== rowId) return null;
+    const q = (rows.find(r => r._id === rowId)?.query || '').trim();
+    if (!q) return null;
     return (
       <View style={styles.dropdown}>
-        <ScrollView keyboardShouldPersistTaps="handled" nestedScrollEnabled style={{ maxHeight: 200 }}>
+        <ScrollView keyboardShouldPersistTaps="handled" nestedScrollEnabled style={{ maxHeight: 220 }}>
           {itemResults.map(it => (
             <TouchableOpacity key={it.id} style={styles.dropdownItem} onPress={() => selectInvItem(it, rowId)}>
               <Text style={styles.dropdownName}>{it.item_name}</Text>
               <Text style={styles.dropdownSub}>Stok: {it.quantity} • HPP: {formatRupiah(it.cost ?? 0)}</Text>
             </TouchableOpacity>
           ))}
+          {/* Item not in the catalog yet → create it inline, then receive it here. */}
+          <TouchableOpacity style={styles.dropdownCreate} onPress={() => openNewItem(rowId)}>
+            <Feather name="plus-circle" size={15} color="#16A34A" />
+            <Text style={styles.dropdownCreateText} numberOfLines={1}>Buat barang baru: "{q}"</Text>
+          </TouchableOpacity>
         </ScrollView>
       </View>
     );
@@ -434,25 +484,58 @@ export default function PembelianScreen() {
   );
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={{ padding: isDesktop ? 24 : 14, paddingBottom: 60 }}
-      keyboardShouldPersistTaps="handled"
-      onScrollBeginDrag={() => { setActiveRowId(null); setShowSupplierList(false); }}
-    >
-      <Text style={styles.pageTitle}>Pembelian</Text>
-      {isDesktop ? (
-        <View style={styles.twoCol}>
-          <View style={{ flex: 1.5 }}>{renderForm()}</View>
-          <View style={{ flex: 1 }}>{renderRecent()}</View>
+    <>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={{ padding: isDesktop ? 24 : 14, paddingBottom: 60 }}
+        keyboardShouldPersistTaps="handled"
+        onScrollBeginDrag={() => { setActiveRowId(null); setShowSupplierList(false); }}
+      >
+        <Text style={styles.pageTitle}>Pembelian</Text>
+        {isDesktop ? (
+          <View style={styles.twoCol}>
+            <View style={{ flex: 1.5 }}>{renderForm()}</View>
+            <View style={{ flex: 1 }}>{renderRecent()}</View>
+          </View>
+        ) : (
+          <>
+            {renderForm()}
+            {renderRecent()}
+          </>
+        )}
+      </ScrollView>
+
+      {/* Inline "create new item" modal (from a purchase row that found no match) */}
+      <Modal visible={newItemFor !== null} transparent animationType="fade" onRequestClose={() => setNewItemFor(null)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHead}>
+              <Text style={styles.modalTitle}>Barang Baru</Text>
+              <TouchableOpacity onPress={() => setNewItemFor(null)}><Feather name="x" size={22} color="#0F172A" /></TouchableOpacity>
+            </View>
+            <Text style={styles.label}>Nama Barang</Text>
+            <TextInput style={styles.input} value={niName} onChangeText={setNiName} placeholder="Nama barang" />
+            <Text style={styles.label}>Satuan</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+              {metrics.map(m => {
+                const active = niUnit === String(m.id);
+                return (
+                  <TouchableOpacity key={m.id} onPress={() => setNiUnit(String(m.id))} style={[styles.unitChip, active && styles.unitChipActive]}>
+                    <Text style={active ? styles.unitChipTextActive : styles.unitChipText}>{m.unit_name}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+            <Text style={styles.label}>Harga Jual (Rp) — opsional</Text>
+            <TextInput style={styles.input} value={niPrice} onChangeText={setNiPrice} keyboardType="numeric" placeholder="0" />
+            <Text style={styles.modalHint}>Stok & harga modal (HPP) terisi dari pembelian ini. Harga jual bisa diatur nanti di Stok Barang.</Text>
+            <TouchableOpacity style={[styles.primaryBtn, saving && styles.btnDisabled]} onPress={handleCreateItem} disabled={saving}>
+              {saving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.btnText}>BUAT & PILIH</Text>}
+            </TouchableOpacity>
+          </View>
         </View>
-      ) : (
-        <>
-          {renderForm()}
-          {renderRecent()}
-        </>
-      )}
-    </ScrollView>
+      </Modal>
+    </>
   );
 }
 
@@ -495,6 +578,19 @@ const styles = StyleSheet.create({
   dropdownItem: { paddingVertical: 10, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
   dropdownName: { fontSize: 14, fontWeight: '700', color: '#0F172A' },
   dropdownSub: { fontSize: 11, color: '#64748B', marginTop: 2 },
+  dropdownCreate: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, backgroundColor: '#F0FDF4', borderTopWidth: 1, borderTopColor: '#DCFCE7' },
+  dropdownCreateText: { fontSize: 13, fontWeight: '800', color: '#166534', flex: 1 },
+
+  // New-item modal
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(15,23,42,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  modalCard: { backgroundColor: '#FFF', borderRadius: 20, padding: 22, width: '100%', maxWidth: 460 },
+  modalHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  modalTitle: { fontSize: 18, fontWeight: '900', color: '#0F172A' },
+  modalHint: { fontSize: 11, color: '#94A3B8', marginTop: -4, marginBottom: 14, lineHeight: 16 },
+  unitChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: '#F1F5F9', marginRight: 8, borderWidth: 1, borderColor: '#E2E8F0' },
+  unitChipActive: { backgroundColor: '#DC2626', borderColor: '#DC2626' },
+  unitChipText: { fontSize: 12, color: '#475569', fontWeight: '600' },
+  unitChipTextActive: { fontSize: 12, color: '#FFF', fontWeight: '700' },
 
   // Summary
   summaryBox: { backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 16, padding: 16, marginTop: 8, marginBottom: 16 },

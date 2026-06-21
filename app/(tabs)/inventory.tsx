@@ -1,6 +1,6 @@
 import { Feather } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
     ActivityIndicator, Alert,
     FlatList,
@@ -31,6 +31,7 @@ interface InventoryItem {
   min_stock: number;
   metric_id: number;
   allow_preorder?: boolean;
+  last_supplier_name?: string | null;
   metrics?: { unit_name: string };
 }
 interface SplitTarget { _tempId: string; itemId: string; qty: string; }
@@ -46,6 +47,9 @@ export default function InventoryScreen() {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [metrics, setMetrics] = useState<Metric[]>([]);
   const [search, setSearch] = useState('');
+  const [visibleCount, setVisibleCount] = useState(20);  // load-more page size
+  const [invFilter, setInvFilter] = useState<'all' | 'low' | 'out' | 'preorder'>('all');
+  const [invSort, setInvSort] = useState<'name' | 'stock' | 'value'>('name');
 
   // Modal Visibility
   const [addModalVisible, setAddModalVisible] = useState(false);
@@ -84,6 +88,8 @@ export default function InventoryScreen() {
   };
 
   useEffect(() => { fetchData(); }, []);
+  // Restart the visible window whenever the search changes.
+  useEffect(() => { setVisibleCount(20); }, [search, invFilter, invSort]);
 
   // --- LOGIC: SAVE / UPDATE PRODUCT ---
   const handleSaveProduct = async () => {
@@ -187,6 +193,37 @@ export default function InventoryScreen() {
     setEditModalVisible(true);
   };
 
+  const exportCSV = () => {
+    if (Platform.OS !== 'web') { Alert.alert('Ekspor', 'Ekspor CSV tersedia di aplikasi web.'); return; }
+    const esc = (v: any) => { const s = String(v ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+    const lines = [['Nama', 'Stok', 'Satuan', 'Harga', 'Nilai', 'Batas Minim', 'Supplier'].join(',')];
+    inventory.forEach(i => lines.push([esc(i.item_name), i.quantity, esc(i.metrics?.unit_name || ''), i.price, i.price * i.quantity, i.min_stock, esc(i.last_supplier_name || '')].join(',')));
+    const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'inventaris.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const overview = useMemo(() => ({
+    count: inventory.length,
+    value: inventory.reduce((a, i) => a + i.price * i.quantity, 0),
+    low: inventory.filter(i => i.quantity <= i.min_stock).length,
+  }), [inventory]);
+
+  const filtered = useMemo(() => {
+    let list = inventory.filter(i => i.item_name.toLowerCase().includes(search.toLowerCase()));
+    if (invFilter === 'low') list = list.filter(i => i.quantity <= i.min_stock);
+    else if (invFilter === 'out') list = list.filter(i => i.quantity <= 0);
+    else if (invFilter === 'preorder') list = list.filter(i => i.allow_preorder);
+    return [...list].sort((a, b) =>
+      invSort === 'stock' ? a.quantity - b.quantity
+        : invSort === 'value' ? (b.price * b.quantity) - (a.price * a.quantity)
+        : a.item_name.localeCompare(b.item_name)
+    );
+  }, [inventory, search, invFilter, invSort]);
+
   return (
     <View style={styles.container}>
       {/* HEADER */}
@@ -195,13 +232,32 @@ export default function InventoryScreen() {
           <Feather name="search" size={18} color="#94A3B8" />
           <TextInput placeholder="Cari material..." style={styles.searchInput} value={search} onChangeText={setSearch} />
         </View>
+        <TouchableOpacity style={styles.exportBtn} onPress={exportCSV}><Feather name="download" size={18} color="#FFF" /></TouchableOpacity>
         <TouchableOpacity style={styles.refreshBtn} onPress={fetchData}><Feather name="refresh-cw" size={18} color="#FFF" /></TouchableOpacity>
+      </View>
+
+      {/* OVERVIEW + FILTERS */}
+      <View style={[styles.overviewRow, { paddingHorizontal: isDesktop ? 40 : 14 }]}>
+        <View style={styles.ovItem}><Text style={styles.ovLabel}>SKU</Text><Text style={styles.ovVal}>{overview.count}</Text></View>
+        <View style={styles.ovItem}><Text style={styles.ovLabel}>NILAI STOK</Text><Text style={styles.ovVal} numberOfLines={1} adjustsFontSizeToFit>Rp {overview.value.toLocaleString('id-ID')}</Text></View>
+        <View style={styles.ovItem}><Text style={styles.ovLabel}>STOK MINIM</Text><Text style={[styles.ovVal, overview.low > 0 && { color: '#DC2626' }]}>{overview.low}</Text></View>
+      </View>
+      <View style={[styles.filterRow, { paddingHorizontal: isDesktop ? 40 : 14 }]}>
+        {([['all', 'Semua'], ['low', 'Stok Minim'], ['out', 'Habis'], ['preorder', 'Pre-order']] as const).map(([k, l]) => (
+          <TouchableOpacity key={k} onPress={() => setInvFilter(k)} style={[styles.fChip, invFilter === k && styles.fChipActive]}>
+            <Text style={[styles.fChipText, invFilter === k && styles.fChipTextActive]}>{l}</Text>
+          </TouchableOpacity>
+        ))}
+        <TouchableOpacity onPress={() => setInvSort(s => s === 'name' ? 'stock' : s === 'stock' ? 'value' : 'name')} style={styles.sortBtn}>
+          <Feather name="bar-chart-2" size={13} color="#0F172A" />
+          <Text style={styles.sortText}>{invSort === 'name' ? 'A-Z' : invSort === 'stock' ? 'Stok' : 'Nilai'}</Text>
+        </TouchableOpacity>
       </View>
 
       {/* LIST */}
       {loading && !addModalVisible ? <ActivityIndicator style={{marginTop: 50}} color="#DC2626" /> : (
         <FlatList
-          data={inventory.filter(i => i.item_name.toLowerCase().includes(search.toLowerCase()))}
+          data={filtered.slice(0, visibleCount)}
           contentContainerStyle={{ padding: isDesktop ? 40 : 14 }}
           renderItem={({ item }) => {
             const isLow = item.quantity <= item.min_stock;
@@ -214,6 +270,9 @@ export default function InventoryScreen() {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.itemName}>{item.item_name}</Text>
                   <Text style={styles.itemPrice}>Rp {item.price.toLocaleString()}</Text>
+                  <Text style={styles.itemSupplier} numberOfLines={1}>
+                    <Feather name="truck" size={10} color="#94A3B8" /> {item.last_supplier_name || 'Belum ada supplier'}
+                  </Text>
                   {item.allow_preorder && <Text style={styles.poBadge}>PRE-ORDER</Text>}
                 </View>
                 <View style={{ alignItems: 'flex-end' }}>
@@ -224,6 +283,11 @@ export default function InventoryScreen() {
               </Animated.View>
             );
           }}
+          ListFooterComponent={filtered.length > visibleCount ? (
+            <TouchableOpacity style={styles.loadMoreBtn} onPress={() => setVisibleCount((c) => c + 20)}>
+              <Text style={styles.loadMoreText}>Muat Lebih Banyak ({Math.min(visibleCount, filtered.length)} / {filtered.length})</Text>
+            </TouchableOpacity>
+          ) : null}
         />
       )}
 
@@ -381,12 +445,27 @@ const styles = StyleSheet.create({
   searchBar: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#F3F4F6', borderRadius: 12, paddingHorizontal: 15, height: 45 },
   searchInput: { flex: 1, marginLeft: 10, fontSize: 14, outlineStyle: 'none' } as any,
   refreshBtn: { width: 45, height: 45, backgroundColor: '#64748B', borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  exportBtn: { width: 45, height: 45, backgroundColor: '#0F172A', borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  overviewRow: { flexDirection: 'row', gap: 8, paddingTop: 14, backgroundColor: '#FFF' },
+  ovItem: { flex: 1, backgroundColor: '#F9FAFB', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#E5E7EB' },
+  ovLabel: { fontSize: 9, fontWeight: '800', color: '#94A3B8', marginBottom: 4 },
+  ovVal: { fontSize: 15, fontWeight: '900', color: '#111827' },
+  filterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center', paddingTop: 12, paddingBottom: 14, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+  fChip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 18, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#E2E8F0' },
+  fChipActive: { backgroundColor: '#DC2626', borderColor: '#DC2626' },
+  fChipText: { fontSize: 12, fontWeight: '700', color: '#64748B' },
+  fChipTextActive: { color: '#FFF' },
+  sortBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 18, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#E2E8F0', marginLeft: 'auto' },
+  sortText: { fontSize: 12, fontWeight: '800', color: '#0F172A' },
   
   itemCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', padding: 18, borderRadius: 20, marginBottom: 12, borderWidth: 1, borderColor: '#E5E7EB', elevation: 2 },
   cardLow: { borderColor: '#FEE2E2', backgroundColor: '#FFF5F5' },
   iconCircle: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#F9FAFB', justifyContent: 'center', alignItems: 'center', marginRight: 15 },
   itemName: { fontSize: 15, fontWeight: '700', color: '#1F2937' },
   itemPrice: { fontSize: 12, color: '#94A3B8' },
+  itemSupplier: { fontSize: 11, color: '#94A3B8', marginTop: 3 },
+  loadMoreBtn: { alignSelf: 'center', marginTop: 10, marginBottom: 20, paddingVertical: 12, paddingHorizontal: 26, backgroundColor: '#FFF', borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0' },
+  loadMoreText: { fontSize: 13, fontWeight: '800', color: '#DC2626' },
   itemQty: { fontSize: 16, fontWeight: '800', color: '#111827' },
   lowBadge: { fontSize: 9, fontWeight: '900', color: '#DC2626', marginTop: 4 },
 
