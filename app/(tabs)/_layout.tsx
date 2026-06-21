@@ -13,7 +13,7 @@ export default function TabLayout() {
   
   // Responsive Constants
   const isWeb = width > 768;
-  const isOwner = profile?.role === 'OWNER';
+  const isManager = profile?.role === 'OWNER' || profile?.role === 'SUPERADMIN';
 
   // Sidebar visibility state (for Web)
   const [collapsed, setCollapsed] = useState(false);
@@ -74,7 +74,7 @@ export default function TabLayout() {
             />
 
             {/* ADMNISTRASI SECTION (Owner Only) */}
-            {isOwner && (
+            {isManager && (
                 <>
                     <Text style={[styles.sidebarSection, { marginTop: 25 }, collapsed && { textAlign: 'center', fontSize: 8 }]}>
                         {collapsed ? "---" : "ADMINISTRASI"}
@@ -89,6 +89,12 @@ export default function TabLayout() {
                         icon="bar-chart-2" label="Laporan" 
                         collapsed={collapsed} 
                         onPress={() => {}} 
+                    />
+                    <SidebarItem
+                        icon="users" label="Pengguna"
+                        active={pathname === '/users'}
+                        collapsed={collapsed}
+                        onPress={() => router.push('/(tabs)/users' as any)}
                     />
                 </>
             )}
@@ -145,12 +151,14 @@ export default function TabLayout() {
         name="pos" 
         options={{ title: 'POS', tabBarIcon: ({ color }) => <Feather name="shopping-cart" size={20} color={color} /> }} 
       />
-      {isOwner && (
-        <Tabs.Screen 
-            name="setup" 
-            options={{ title: 'Setup', tabBarIcon: ({ color }) => <Feather name="settings" size={20} color={color} /> }} 
-        />
-      )}
+      <Tabs.Screen
+        name="setup"
+        options={{ href: isManager ? undefined : null, title: 'Setup', tabBarIcon: ({ color }) => <Feather name="settings" size={20} color={color} /> }}
+      />
+      <Tabs.Screen
+        name="users"
+        options={{ href: isManager ? undefined : null, title: 'Pengguna', tabBarIcon: ({ color }) => <Feather name="users" size={20} color={color} /> }}
+      />
     </Tabs>
   );
 }
