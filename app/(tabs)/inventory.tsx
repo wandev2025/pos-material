@@ -16,6 +16,7 @@ import {
     useWindowDimensions,
     View
 } from 'react-native';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { parseNum } from '../../lib/number';
 import { useProfile } from '../../lib/ProfileContext';
 import { supabase } from '../../lib/supabase';
@@ -205,6 +206,7 @@ export default function InventoryScreen() {
           renderItem={({ item }) => {
             const isLow = item.quantity <= item.min_stock;
             return (
+              <Animated.View entering={FadeIn.duration(180)}>
               <TouchableOpacity style={[styles.itemCard, isLow && styles.cardLow]} onPress={() => handleOpenEdit(item)}>
                 <View style={[styles.iconCircle, isLow && {backgroundColor:'#FEE2E2'}]}>
                   <Feather name="package" size={20} color={isLow ? "#DC2626" : "#64748B"} />
@@ -219,6 +221,7 @@ export default function InventoryScreen() {
                     {isLow && <Text style={styles.lowBadge}>STOK MINIM ({item.min_stock})</Text>}
                 </View>
               </TouchableOpacity>
+              </Animated.View>
             );
           }}
         />

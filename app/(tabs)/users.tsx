@@ -4,6 +4,7 @@ import {
   ActivityIndicator, Alert, FlatList, Platform,
   StyleSheet, Text, TouchableOpacity, useWindowDimensions, View
 } from 'react-native';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { Role, useProfile } from '../../lib/ProfileContext';
 import { supabase } from '../../lib/supabase';
 
@@ -83,7 +84,7 @@ export default function UsersScreen() {
             const isSelf = item.id === user?.id;
             const locked = isSelf || (item.role === 'SUPERADMIN' && !isSuperadmin);
             return (
-              <View style={styles.card}>
+              <Animated.View style={styles.card} entering={FadeIn.duration(180)}>
                 <View style={styles.cardTop}>
                   <View style={styles.avatar}>
                     <Text style={styles.avatarText}>{(item.full_name || '?').charAt(0).toUpperCase()}</Text>
@@ -110,7 +111,7 @@ export default function UsersScreen() {
                     ))}
                   </View>
                 )}
-              </View>
+              </Animated.View>
             );
           }}
         />

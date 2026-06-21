@@ -1,6 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useProfile } from '../../lib/ProfileContext';
 import { supabase } from '../../lib/supabase';
 
@@ -55,7 +56,7 @@ export default function Dashboard() {
       <Text style={styles.name}>{profile?.full_name || 'Admin'}</Text>
       <Text style={styles.quote}>"Jadilah seperti petani, menanam dengan sungguh-sungguh, lalu menyerahkan hasil panen pada Tuhan."</Text>
 
-      <View style={styles.statsCard}>
+      <Animated.View style={styles.statsCard} entering={FadeInDown.duration(260).delay(60)}>
         <View style={styles.cardHeader}>
           <Text style={styles.cardTitle}>OVERVIEW HARI INI</Text>
           <Text style={styles.time}>{clock}</Text>
@@ -67,16 +68,16 @@ export default function Dashboard() {
         </View>
         <Text style={styles.onDuty}>ON DUTY</Text>
         <Text style={styles.noAbsen}>{profile?.full_name || 'Belum ada absen masuk'}</Text>
-      </View>
+      </Animated.View>
 
-      <View style={styles.statusCard}>
+      <Animated.View style={styles.statusCard} entering={FadeInDown.duration(260).delay(140)}>
         <View style={styles.statusHeader}>
           <Feather name="shield" size={20} color="#DC2626" />
           <Text style={styles.statusTitle}>STATUS KREDENSIAL</Text>
         </View>
         <View style={styles.badge}><Text style={styles.badgeText}>{profile?.role || 'OWNER'}</Text></View>
         <Text style={styles.statusDesc}>Akses <Text style={{fontWeight:'bold'}}>{profile?.role?.toLowerCase() || 'owner'}</Text> dikonfirmasi. Gunakan menu di samping untuk mengelola operasional toko.</Text>
-      </View>
+      </Animated.View>
     </ScrollView>
   );
 }

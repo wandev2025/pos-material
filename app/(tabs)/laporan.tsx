@@ -5,6 +5,7 @@ import {
   ActivityIndicator, Alert, Platform, ScrollView,
   StyleSheet, Text, TouchableOpacity, useWindowDimensions, View
 } from 'react-native';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { useProfile } from '../../lib/ProfileContext';
 import { supabase } from '../../lib/supabase';
 
@@ -267,7 +268,7 @@ export default function LaporanScreen() {
       </View>
 
       {loading ? <ActivityIndicator style={{ marginTop: 50 }} color="#DC2626" /> : (
-        <>
+        <Animated.View entering={FadeIn.duration(260)}>
           {/* Summary: OMZET hero on top, the pair below */}
           <View style={styles.heroCard}>
             <Text style={styles.summaryLabelLight}>OMZET</Text>
@@ -353,7 +354,7 @@ export default function LaporanScreen() {
               ))}
             <Text style={styles.note}>Piutang dihitung dari semua transaksi belum lunas (di luar filter tanggal).</Text>
           </View>
-        </>
+        </Animated.View>
       )}
     </ScrollView>
   );

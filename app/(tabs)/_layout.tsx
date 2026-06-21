@@ -237,7 +237,7 @@ function SidebarItem({ icon, label, active, onPress, collapsed }: any) {
 const PRIMARY_NAV = [
   { route: '/(tabs)/', path: '/', icon: 'home', label: 'Beranda' },
   { route: '/(tabs)/inventory', path: '/inventory', icon: 'package', label: 'Stok' },
-  { route: '/(tabs)/pos', path: '/pos', icon: 'shopping-cart', label: 'Kasir' },
+  { route: '/(tabs)/pos', path: '/pos', icon: 'shopping-cart', label: 'POS' },
   { route: '/(tabs)/kasir', path: '/kasir', icon: 'dollar-sign', label: 'Tutup' },
 ];
 
