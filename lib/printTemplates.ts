@@ -8,6 +8,12 @@ const esc = (value: any): string =>
 
 export const generatePrintHtml = (type: 'THERMAL' | 'FAKTUR' | 'DO', settings: any, sale: any, items: any[]) => {
   const shop = settings || { shop_name: 'TOKO', shop_address: '', shop_phone: '' };
+
+  // sale.total_amount is already NET of all discounts. Show a Subtotal/Diskon
+  // breakdown only when a discount was actually applied.
+  const gross = items.reduce((a, i) => a + (i.price_at_sale * i.quantity), 0);
+  const totalDiscount = Math.max(0, Math.round(gross - (sale.total_amount || 0)));
+  const hasDiscount = totalDiscount > 0;
   
   // SHARED STYLES (Based on your Component Styles)
   const commonStyles = `
@@ -62,6 +68,14 @@ export const generatePrintHtml = (type: 'THERMAL' | 'FAKTUR' | 'DO', settings: a
               `).join('')}
             </table>
             <div class="divider"></div>
+            ${hasDiscount ? `
+              <div style="display: flex; justify-content: space-between; font-size: 12px;">
+                <span>Subtotal</span><span>${formatRupiah(gross)}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; font-size: 12px;">
+                <span>Diskon</span><span>- ${formatRupiah(totalDiscount)}</span>
+              </div>
+            ` : ''}
             <div style="display: flex; justify-content: space-between; font-weight: bold;">
               <span>TOTAL</span>
               <span>${formatRupiah(sale.total_amount)}</span>
@@ -130,6 +144,14 @@ export const generatePrintHtml = (type: 'THERMAL' | 'FAKTUR' | 'DO', settings: a
             </div>
             ${!isDO ? `
               <div style="flex: 1; text-align: right;">
+                ${hasDiscount ? `
+                  <div style="display: flex; justify-content: flex-end; gap: 20px; font-size: 12px;">
+                    <span>Subtotal</span><span>${formatRupiah(gross)}</span>
+                  </div>
+                  <div style="display: flex; justify-content: flex-end; gap: 20px; font-size: 12px;">
+                    <span>Diskon</span><span>- ${formatRupiah(totalDiscount)}</span>
+                  </div>
+                ` : ''}
                 <div style="display: flex; justify-content: flex-end; gap: 20px;">
                   <span class="bold">TOTAL</span>
                   <span class="bold" style="font-size: 16px;">${formatRupiah(sale.total_amount)}</span>
