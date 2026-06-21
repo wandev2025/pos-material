@@ -51,8 +51,8 @@ export default function SignupScreen() {
         </View>
       ) : (
         <View style={styles.logoContainer}>
-          <LinearGradient colors={['#7C3AED', '#A855F7']} style={styles.logoCircle}>
-            <Feather name="shield" size={32} color="#fff" />
+          <LinearGradient colors={['#DC2626', '#991B1B']} style={styles.logoCircle}>
+            <Feather name="box" size={32} color="#fff" />
           </LinearGradient>
           <Text style={styles.title}>Register Account</Text>
           <Text style={styles.subtitleCenter}>Daftar akun manajemen baru</Text>
@@ -84,7 +84,7 @@ export default function SignupScreen() {
       </View>
 
       <TouchableOpacity activeOpacity={0.85} onPress={handleSignup} disabled={loading}>
-        <LinearGradient colors={['#7C3AED', '#9333EA']} style={styles.button}>
+        <LinearGradient colors={['#DC2626', '#991B1B']} style={styles.button}>
           {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>DAFTAR AKUN</Text>}
         </LinearGradient>
       </TouchableOpacity>
@@ -103,7 +103,7 @@ export default function SignupScreen() {
         {/* Desktop-only brand panel */}
         {isDesktop && (
           <LinearGradient
-            colors={['#7C3AED', '#A855F7']}
+            colors={['#DC2626', '#991B1B']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.brandPanel}
@@ -112,7 +112,7 @@ export default function SignupScreen() {
             <View style={styles.brandOrb2} />
             <View style={styles.brandContent}>
               <View style={styles.brandLogo}>
-                <Feather name="shield" size={36} color="#fff" />
+                <Feather name="box" size={36} color="#fff" />
               </View>
               <Text style={styles.brandTitle}>POSMATERIAL</Text>
               <Text style={styles.brandTagline}>Sistem Manajemen Konstruksi</Text>
@@ -172,9 +172,9 @@ const styles = StyleSheet.create({
   formPaneDesktop: { backgroundColor: '#FFFFFF' },
   scrollContainer: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
   centerFill: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
-  circleTop: { position: 'absolute', width: 300, height: 300, borderRadius: 150, backgroundColor: '#EDE9FE', top: -100, right: -50 },
+  circleTop: { position: 'absolute', width: 300, height: 300, borderRadius: 150, backgroundColor: '#FEE2E2', top: -100, right: -50 },
 
-  card: { width: '100%', maxWidth: 420, alignSelf: 'center', backgroundColor: '#FFF', borderRadius: 30, padding: 28, shadowColor: '#7C3AED', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.08, shadowRadius: 24, elevation: 5, borderWidth: 1, borderColor: '#F3F4F6' },
+  card: { width: '100%', maxWidth: 420, alignSelf: 'center', backgroundColor: '#FFF', borderRadius: 30, padding: 28, shadowColor: '#DC2626', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.08, shadowRadius: 24, elevation: 5, borderWidth: 1, borderColor: '#F3F4F6' },
   cardFlat: { maxWidth: 400, backgroundColor: 'transparent', shadowOpacity: 0, elevation: 0, borderWidth: 0, padding: 8 },
 
   logoContainer: { alignItems: 'center', marginBottom: 25 },
@@ -192,5 +192,5 @@ const styles = StyleSheet.create({
   buttonText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
   loginBtn: { marginTop: 20, alignItems: 'center' },
   loginText: { color: '#6B7280' },
-  loginHighlight: { color: '#7C3AED', fontWeight: '700' }
+  loginHighlight: { color: '#DC2626', fontWeight: '700' }
 });

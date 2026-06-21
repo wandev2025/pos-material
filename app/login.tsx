@@ -77,8 +77,8 @@ export default function LoginScreen() {
         </View>
       ) : (
         <View style={styles.logoContainer}>
-          <LinearGradient colors={['#7C3AED', '#A855F7']} style={styles.logoCircle}>
-            <Feather name="shield" size={32} color="#fff" />
+          <LinearGradient colors={['#DC2626', '#991B1B']} style={styles.logoCircle}>
+            <Feather name="box" size={32} color="#fff" />
           </LinearGradient>
           <Text style={styles.title}>POSMATERIAL</Text>
           <Text style={styles.subtitle}>Sistem Manajemen Konstruksi</Text>
@@ -122,7 +122,7 @@ export default function LoginScreen() {
       </View>
 
       <TouchableOpacity activeOpacity={0.85} onPress={handleLogin} disabled={loading}>
-        <LinearGradient colors={['#7C3AED', '#9333EA']} style={styles.button}>
+        <LinearGradient colors={['#DC2626', '#991B1B']} style={styles.button}>
           {loading ? <ActivityIndicator color="#fff" /> : (
             <>
               <Text style={styles.buttonText}>MASUK SISTEM</Text>
@@ -146,7 +146,7 @@ export default function LoginScreen() {
         {/* Desktop-only brand panel */}
         {isDesktop && (
           <LinearGradient
-            colors={['#7C3AED', '#A855F7']}
+            colors={['#DC2626', '#991B1B']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.brandPanel}
@@ -155,7 +155,7 @@ export default function LoginScreen() {
             <View style={styles.brandOrb2} />
             <View style={styles.brandContent}>
               <View style={styles.brandLogo}>
-                <Feather name="shield" size={36} color="#fff" />
+                <Feather name="box" size={36} color="#fff" />
               </View>
               <Text style={styles.brandTitle}>POSMATERIAL</Text>
               <Text style={styles.brandTagline}>Sistem Manajemen Konstruksi</Text>
@@ -199,7 +199,7 @@ export default function LoginScreen() {
 const isWebFullHeight = Platform.OS === 'web' ? ({ height: '100vh' } as any) : null;
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F3F4F6', overflow: 'hidden' },
+  container: { flex: 1, backgroundColor: '#F9FAFB', overflow: 'hidden' },
   split: { flex: 1 },
   splitRow: { flexDirection: 'row' },
 
@@ -218,10 +218,10 @@ const styles = StyleSheet.create({
   formPaneDesktop: { backgroundColor: '#FFFFFF' },
   scrollContainer: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
   centerFill: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
-  circleTop: { position: 'absolute', width: 350, height: 350, borderRadius: 175, backgroundColor: '#EDE9FE', top: -150, right: -100 },
-  circleBottom: { position: 'absolute', width: 300, height: 300, borderRadius: 150, backgroundColor: '#DDD6FE', bottom: -150, left: -100, opacity: 0.5 },
+  circleTop: { position: 'absolute', width: 350, height: 350, borderRadius: 175, backgroundColor: '#FEE2E2', top: -150, right: -100 },
+  circleBottom: { position: 'absolute', width: 300, height: 300, borderRadius: 150, backgroundColor: '#FEF2F2', bottom: -150, left: -100, opacity: 0.5 },
 
-  card: { width: '100%', maxWidth: 420, alignSelf: 'center', backgroundColor: '#FFF', borderRadius: 32, padding: 30, shadowColor: '#7C3AED', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.08, shadowRadius: 24, elevation: 8 },
+  card: { width: '100%', maxWidth: 420, alignSelf: 'center', backgroundColor: '#FFF', borderRadius: 32, padding: 30, shadowColor: '#DC2626', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.08, shadowRadius: 24, elevation: 8 },
   cardFlat: { maxWidth: 400, backgroundColor: 'transparent', shadowOpacity: 0, elevation: 0, padding: 8 },
 
   logoContainer: { alignItems: 'center', marginBottom: 35 },
@@ -239,5 +239,5 @@ const styles = StyleSheet.create({
   buttonText: { color: '#FFF', fontSize: 16, fontWeight: '800' },
   signupBtn: { marginTop: 25, alignItems: 'center' },
   signupText: { color: '#6B7280', fontSize: 14 },
-  signupHighlight: { color: '#7C3AED', fontWeight: '800' }
+  signupHighlight: { color: '#DC2626', fontWeight: '800' }
 });
