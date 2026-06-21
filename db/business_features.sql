@@ -97,6 +97,10 @@ create table if not exists return_items (
 alter table sales     add column if not exists customer_id     bigint references customers(id);
 alter table sales     add column if not exists amount_returned numeric not null default 0;
 alter table inventory add column if not exists cost            numeric not null default 0;
+-- "Where it's from": the most recent supplier this item was purchased from,
+-- maintained by create_purchase. Name is denormalised for cheap display.
+alter table inventory add column if not exists last_supplier_id   bigint references suppliers(id);
+alter table inventory add column if not exists last_supplier_name text;
 
 -- -----------------------------------------------------------------------------
 -- Row level security — every new table is gated like sales/inventory: RLS on,
@@ -204,7 +208,9 @@ begin
                       then ((v_old_qty * v_old_cost) + (v_in_qty * v_in_cost))
                            / (v_old_qty + v_in_qty)
                       else v_old_cost
-                    end
+                    end,
+             last_supplier_id   = v_purchase.supplier_id,
+             last_supplier_name = v_purchase.supplier_name
        where id = v_inv_id;
     end if;
   end loop;
