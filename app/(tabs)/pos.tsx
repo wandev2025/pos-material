@@ -8,6 +8,7 @@ import {
   Modal, Platform, ScrollView, StyleSheet, Text,
   TextInput, TouchableOpacity, useWindowDimensions, View, ViewStyle
 } from 'react-native';
+import { parseNum } from '../../lib/number';
 import { generatePrintHtml } from '../../lib/printTemplates';
 import { useProfile } from '../../lib/ProfileContext';
 import { supabase } from '../../lib/supabase';
@@ -177,11 +178,11 @@ export default function UnifiedPOSHub() {
 
   // --- CALCULATIONS ---
   const currentTotal = useMemo(() => 
-    Math.round(rows.reduce((acc, row) => acc + (parseFloat(row.total) || 0), 0)), 
+    Math.round(rows.reduce((acc, row) => acc + parseNum(row.total), 0)), 
   [rows]);
   
-  const cashReceived = Math.round(parseFloat(cashReceivedStr) || 0);
-  const downPayment = Math.round(parseFloat(downPaymentStr) || 0);
+  const cashReceived = Math.round(parseNum(cashReceivedStr));
+  const downPayment = Math.round(parseNum(downPaymentStr));
   const changeAmount = cashReceived - currentTotal;
   const remainingBalance = Math.max(0, currentTotal - downPayment);
   const isTempo = selectedPayment.toLowerCase().includes('tempo');
@@ -214,7 +215,7 @@ export default function UnifiedPOSHub() {
     setRows(prev => prev.map(r => {
       if (r._id !== rowId) return r;
       const updated = { ...r, [field]: val };
-      const rowTotal = Math.round(parseFloat(updated.qty || '0') * parseFloat(updated.price || '0'));
+      const rowTotal = Math.round(parseNum(updated.qty) * parseNum(updated.price));
       updated.total = rowTotal.toString();
       return updated;
     }));
@@ -230,7 +231,7 @@ export default function UnifiedPOSHub() {
       Alert.alert("Kosong", "Pilih barang terlebih dahulu.");
       return false;
     }
-    const outOfStock = validRows.filter(r => parseFloat(r.qty) > (r.item?.quantity || 0));
+    const outOfStock = validRows.filter(r => parseNum(r.qty) > (r.item?.quantity || 0));
     if (outOfStock.length > 0) {
       const names = outOfStock.map(r => `- ${r.item?.item_name} (Stok: ${r.item?.quantity})`).join('\n');
       Alert.alert("Stok Tidak Cukup", `Barang berikut melebihi stok:\n${names}`);
@@ -248,7 +249,7 @@ export default function UnifiedPOSHub() {
   };
 
   const handleCheckout = async () => {
-    const validRows = rows.filter(r => r.item && parseFloat(r.qty) > 0);
+    const validRows = rows.filter(r => r.item && parseNum(r.qty) > 0);
     if (!validateSale(validRows)) return;
 
     setLoading(true);
@@ -269,15 +270,15 @@ export default function UnifiedPOSHub() {
         sale_id: sale.id,
         inventory_id: r.item!.id,
         item_name: r.item!.item_name,
-        quantity: parseFloat(r.qty),
-        price_at_sale: Math.round(parseFloat(r.price))
+        quantity: parseNum(r.qty),
+        price_at_sale: Math.round(parseNum(r.price))
       }));
 
       const { error: itemsErr } = await supabase.from('sale_items').insert(itemsToSave);
       if (itemsErr) throw new Error("Gagal menyimpan detail item.");
 
       await Promise.all(validRows.map(r => 
-        supabase.from('inventory').update({ quantity: (r.item?.quantity || 0) - parseFloat(r.qty) }).eq('id', r.item!.id)
+        supabase.from('inventory').update({ quantity: (r.item?.quantity || 0) - parseNum(r.qty) }).eq('id', r.item!.id)
       ));
 
       setLastSale(sale as Sale);
@@ -334,7 +335,7 @@ export default function UnifiedPOSHub() {
 
   const handleUpdateSale = async () => {
     if (!editingSale) return;
-    const validRows = rows.filter(r => r.item && parseFloat(r.qty) > 0);
+    const validRows = rows.filter(r => r.item && parseNum(r.qty) > 0);
     
     setLoading(true);
     try {
@@ -343,8 +344,8 @@ export default function UnifiedPOSHub() {
         sale_id: editingSale.id,
         inventory_id: r.item!.id,
         item_name: r.item!.item_name,
-        quantity: parseFloat(r.qty),
-        price_at_sale: Math.round(parseFloat(r.price))
+        quantity: parseNum(r.qty),
+        price_at_sale: Math.round(parseNum(r.price))
       }));
 
       const deltas = getInventoryDelta(oldItems as SaleItem[], newItems);
@@ -469,7 +470,7 @@ export default function UnifiedPOSHub() {
           <Text style={[styles.mono, styles.cellText, { flex: 0.8 }]}>{row.item?.quantity ?? '-'}</Text>
           <TextInput style={[styles.mono, styles.cellInput, { flex: 1 }]} keyboardType="numeric" value={row.qty} onChangeText={t => updateRow(row._id, 'qty', t)} />
           <TextInput style={[styles.mono, styles.cellInput, { flex: 1.5 }]} keyboardType="numeric" value={row.price} onChangeText={t => updateRow(row._id, 'price', t)} />
-          <Text style={[styles.mono, styles.cellTotal, { flex: 1.5 }]}>{formatRupiah(parseFloat(row.total) || 0)}</Text>
+          <Text style={[styles.mono, styles.cellTotal, { flex: 1.5 }]}>{formatRupiah(parseNum(row.total))}</Text>
           <TouchableOpacity onPress={() => removeRow(row._id)} style={styles.removeBtn}>
             <Ionicons name="trash-outline" size={18} color="#94A3B8" />
           </TouchableOpacity>
