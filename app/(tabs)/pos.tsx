@@ -250,6 +250,17 @@ export default function UnifiedPOSHub() {
   const changeAmount = cashReceived - currentTotal;
   const remainingBalance = Math.max(0, currentTotal - downPayment);
   const isTempo = selectedPayment.toLowerCase().includes('tempo');
+  const isCash = !isTempo && (selectedPayment.toLowerCase().includes('tunai') || selectedPayment.toLowerCase().includes('cash'));
+  const isElectronic = !isTempo && !isCash; // QRIS / Transfer / Debit, etc.
+
+  // Reason the checkout is blocked (null = OK) → drives the disabled button + hint.
+  const cartHasItems = rows.some(r => r.item && parseNum(r.qty) > 0);
+  const checkoutBlock =
+    (!cartHasItems || currentTotal <= 0) ? 'Belum ada barang di keranjang'
+    : (isTempo && !selectedCustomerId) ? 'Pilih pelanggan untuk Tempo'
+    : (isCash && cashReceived < currentTotal) ? 'Uang diterima kurang'
+    : null;
+  const checkoutBlocked = loading || !online || !!checkoutBlock;
 
   // --- POS ACTIONS ---
   const handleSearch = (text: string, rowId: string) => {
@@ -371,7 +382,7 @@ export default function UnifiedPOSHub() {
       Alert.alert("Stok Tidak Cukup", `Barang berikut melebihi stok:\n${names}`);
       return false;
     }
-    if (!isTempo && cashReceived < currentTotal) {
+    if (isCash && cashReceived < currentTotal) {
       Alert.alert("Uang Kurang", `Pembayaran tunai minimal ${formatRupiah(currentTotal)}`);
       return false;
     }
@@ -792,7 +803,7 @@ export default function UnifiedPOSHub() {
 
       <View style={{ marginTop: 12 }}>
         <TouchableOpacity style={styles.discountToggle} onPress={() => setShowDiscount(v => !v)}>
-          <Text style={styles.label}>Diskon Transaksi</Text>
+          <Text style={styles.label}>Diskon Transaksi (Rp)</Text>
           <View style={styles.row}>
             {txDiscount > 0 && <Text style={[styles.mono, styles.discountAmount]}>− {formatRupiah(txDiscount)}</Text>}
             <Ionicons name={showDiscount ? 'chevron-up' : 'chevron-down'} size={18} color="#94A3B8" style={{ marginLeft: 8 }} />
@@ -801,7 +812,6 @@ export default function UnifiedPOSHub() {
         {showDiscount && (
           <Animated.View entering={FadeInDown.duration(200)} exiting={FadeOutUp.duration(150)} style={{ marginTop: 8 }}>
             <TextInput style={[styles.mono, styles.input]} keyboardType="numeric" value={discountStr} onChangeText={setDiscountStr} placeholder="0" />
-            {renderMoneyPad(discountStr, setDiscountStr)}
           </Animated.View>
         )}
       </View>
@@ -824,6 +834,11 @@ export default function UnifiedPOSHub() {
               <Text style={[styles.mono, styles.subTotal, { color: '#B45309' }]}>{formatRupiah(remainingBalance)}</Text>
             </View>
           </View>
+        ) : isElectronic ? (
+          <View style={[styles.rowBetween, { marginVertical: 6 }]}>
+            <Text style={styles.label}>Status Pembayaran</Text>
+            <Text style={[styles.mono, styles.subTotal, { fontSize: 15, color: '#16A34A' }]}>{selectedPayment.toUpperCase()} • LUNAS</Text>
+          </View>
         ) : (
           <View>
             <Text style={styles.label}>Uang Diterima</Text>
@@ -842,12 +857,16 @@ export default function UnifiedPOSHub() {
         )}
       </View>
 
-      <PressableScale onPress={handleCheckout} disabled={loading || !online} style={{ marginTop: 25 }}>
-        <LinearGradient colors={online ? ['#DC2626', '#991B1B'] : ['#CBD5E1', '#94A3B8']} style={styles.payBtn}>
+      <PressableScale onPress={handleCheckout} disabled={checkoutBlocked} style={{ marginTop: 25 }}>
+        <LinearGradient colors={checkoutBlocked ? ['#CBD5E1', '#94A3B8'] : ['#DC2626', '#991B1B']} style={styles.payBtn}>
           {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.payBtnText}>PROSES TRANSAKSI</Text>}
         </LinearGradient>
       </PressableScale>
-      {!online && <Text style={styles.offlineHint}>Tidak ada koneksi — transaksi dinonaktifkan sementara.</Text>}
+      {!online ? (
+        <Text style={styles.offlineHint}>Tidak ada koneksi — transaksi dinonaktifkan sementara.</Text>
+      ) : checkoutBlock ? (
+        <Text style={styles.offlineHint}>{checkoutBlock}</Text>
+      ) : null}
     </View>
   );
 
