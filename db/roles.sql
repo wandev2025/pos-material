@@ -76,3 +76,43 @@ drop policy if exists profiles_manager_update on public.profiles;
 create policy profiles_manager_update on public.profiles for update
   using (public.current_user_role() in ('SUPERADMIN','OWNER'))
   with check (public.current_user_role() in ('SUPERADMIN','OWNER'));
+
+-- Hierarchical removal. The role rank is SUPERADMIN(4) > OWNER(3) > ADMIN(2) >
+-- STAFF(1); a caller may delete a user ONLY if their rank is strictly higher
+-- than the target's, and never themselves. Enforced here (security definer) so
+-- the shipped anon key can't bypass it, even though the UI also gates the button.
+-- Deletes the auth user; the FK profiles.id -> auth.users(id) cascade removes the
+-- profile (we also delete it explicitly in case the cascade isn't configured).
+create or replace function public.remove_user(p_target uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_caller_role text;
+  v_target_role text;
+  v_rank jsonb := '{"SUPERADMIN":4,"OWNER":3,"ADMIN":2,"STAFF":1}'::jsonb;
+begin
+  if auth.uid() = p_target then
+    raise exception 'Tidak dapat menghapus akun sendiri';
+  end if;
+
+  select role into v_caller_role from public.profiles where id = auth.uid();
+  select role into v_target_role from public.profiles where id = p_target;
+
+  if v_caller_role is null or v_target_role is null then
+    raise exception 'Pengguna tidak ditemukan';
+  end if;
+
+  if coalesce((v_rank->>v_caller_role)::int, 0) <= coalesce((v_rank->>v_target_role)::int, 0) then
+    raise exception 'Tidak berwenang menghapus pengguna ini';
+  end if;
+
+  delete from public.profiles where id = p_target;
+  delete from auth.users where id = p_target;
+end;
+$$;
+
+revoke all on function public.remove_user(uuid) from public, anon;
+grant execute on function public.remove_user(uuid) to authenticated;

@@ -28,6 +28,9 @@ const ROLE_COLORS: Record<Role, string> = {
   STAFF: '#64748B',
 };
 
+// Higher rank may remove lower rank (never equal/higher, never self).
+const ROLE_RANK: Record<Role, number> = { SUPERADMIN: 4, OWNER: 3, ADMIN: 2, STAFF: 1 };
+
 export default function UsersScreen() {
   const { profile, user } = useProfile();
   const { width } = useWindowDimensions();
@@ -67,6 +70,20 @@ export default function UsersScreen() {
     if (await confirm({ title: 'Ubah Peran', message: msg, confirmText: 'Ubah' })) apply();
   };
 
+  const removeUser = async (target: UserRow) => {
+    const ok = await confirm({
+      title: 'Hapus Pengguna',
+      message: `Hapus akun "${target.full_name || 'pengguna'}" secara permanen? Tindakan ini tidak dapat dibatalkan.`,
+      confirmText: 'Hapus',
+      danger: true,
+    });
+    if (!ok) return;
+    const { error } = await supabase.rpc('remove_user', { p_target: target.id });
+    if (error) return toast.error(error.message);
+    toast.success('Pengguna dihapus');
+    fetchUsers();
+  };
+
   if (!isManager) {
     return (
       <View style={styles.center}>
@@ -99,6 +116,7 @@ export default function UsersScreen() {
           renderItem={({ item }) => {
             const isSelf = item.id === user?.id;
             const locked = isSelf || (item.role === 'SUPERADMIN' && !isSuperadmin);
+            const canRemove = !isSelf && (ROLE_RANK[profile?.role as Role] ?? 0) > (ROLE_RANK[item.role] ?? 0);
             return (
               <Animated.View style={styles.card} entering={FadeIn.duration(180)}>
                 <View style={styles.cardTop}>
@@ -112,6 +130,11 @@ export default function UsersScreen() {
                     </Text>
                     <Text style={[styles.roleTag, { color: ROLE_COLORS[item.role] }]}>{item.role}</Text>
                   </View>
+                  {canRemove && (
+                    <TouchableOpacity onPress={() => removeUser(item)} style={styles.removeBtn}>
+                      <Feather name="trash-2" size={16} color="#DC2626" />
+                    </TouchableOpacity>
+                  )}
                 </View>
                 {locked ? (
                   <Text style={styles.lockedNote}>
@@ -186,6 +209,14 @@ const styles = StyleSheet.create({
   avatarText: { color: '#FFF', fontWeight: '900', fontSize: 16 },
   name: { fontSize: 15, fontWeight: '800', color: '#1F2937' },
   roleTag: { fontSize: 11, fontWeight: '900', marginTop: 2, letterSpacing: 0.5 },
+  removeBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: '#FEF2F2',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   lockedNote: { fontSize: 11, color: '#94A3B8', fontStyle: 'italic', marginTop: 12 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 14 },
   chip: {
