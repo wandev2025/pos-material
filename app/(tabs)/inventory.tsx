@@ -15,6 +15,7 @@ import {
     useWindowDimensions,
     View
 } from 'react-native';
+import { parseNum } from '../../lib/number';
 import { useProfile } from '../../lib/ProfileContext';
 import { supabase } from '../../lib/supabase';
 
@@ -87,8 +88,8 @@ export default function InventoryScreen() {
     setLoading(true);
     const payload = {
       item_name: formName,
-      price: parseFloat(formPrice) || 0,
-      min_stock: parseFloat(formMinStock) || 0,
+      price: parseNum(formPrice),
+      min_stock: parseNum(formMinStock),
       metric_id: parseInt(formMetricId)
     };
 
@@ -97,7 +98,7 @@ export default function InventoryScreen() {
       const { error: err } = await supabase.from('inventory').update(payload).eq('id', selectedItem.id);
       error = err;
     } else {
-      const { error: err } = await supabase.from('inventory').insert([{ ...payload, quantity: parseFloat(formQty) || 0 }]);
+      const { error: err } = await supabase.from('inventory').insert([{ ...payload, quantity: parseNum(formQty) }]);
       error = err;
     }
 
@@ -114,7 +115,8 @@ export default function InventoryScreen() {
   // --- LOGIC: QUICK ADJUST STOCK ---
   const handleAdjustStock = async () => {
     if (!selectedItem || !stockAdjustment) return;
-    const change = parseFloat(stockAdjustment);
+    const change = parseNum(stockAdjustment);
+    if (!change) return;
     const { error } = await supabase.from('inventory').update({ quantity: selectedItem.quantity + change }).eq('id', selectedItem.id);
     if (!error) {
       await supabase.from('inventory_logs').insert([{ 
@@ -132,9 +134,10 @@ export default function InventoryScreen() {
 
   const handleSplitProcess = async () => {
     if (!selectedItem) return;
-    const sourceQty = parseFloat(sourceSplitQty);
-    const validTargets = splitTargets.filter(t => t.itemId !== "" && parseFloat(t.qty) > 0);
+    const sourceQty = parseNum(sourceSplitQty);
+    const validTargets = splitTargets.filter(t => t.itemId !== "" && parseNum(t.qty) > 0);
 
+    if (sourceQty <= 0) return Alert.alert('Error', 'Qty diambil tidak valid');
     if (sourceQty > selectedItem.quantity) return Alert.alert('Error', 'Stok tidak mencukupi');
     
     setLoading(true);
@@ -146,7 +149,7 @@ export default function InventoryScreen() {
     for (const target of validTargets) {
       const targetInv = inventory.find(i => i.id.toString() === target.itemId.toString());
       if (targetInv) {
-        const addAmt = parseFloat(target.qty);
+        const addAmt = parseNum(target.qty);
         await supabase.from('inventory').update({ quantity: targetInv.quantity + addAmt }).eq('id', targetInv.id);
         await supabase.from('inventory_logs').insert([{ item_name: targetInv.item_name, action_type: 'SPLIT_IN', quantity_change: addAmt, employee_name: profile?.full_name }]);
       }
