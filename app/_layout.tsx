@@ -2,7 +2,7 @@ import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFonts } from 'expo-font';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { useEffect } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, Platform, View } from 'react-native';
 import { ProfileProvider, useProfile } from '../lib/ProfileContext';
 
 function RootLayoutNav() {
@@ -52,6 +52,21 @@ function RootLayoutNav() {
 }
 
 export default function RootLayout() {
+  // Replace the browser's default blue focus ring on web inputs with a subtle
+  // brand-red ring, applied globally so every input/textarea/select matches.
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const style = document.createElement('style');
+    style.textContent = `
+      input:focus, textarea:focus, select:focus, [contenteditable]:focus {
+        outline: none !important;
+        box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.25) !important;
+      }
+    `;
+    document.head.appendChild(style);
+    return () => { document.head.removeChild(style); };
+  }, []);
+
   return (
     <ProfileProvider>
       <RootLayoutNav />
