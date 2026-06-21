@@ -16,6 +16,7 @@ import { formatRupiah } from '../../lib/format';
 import { parseNum } from '../../lib/number';
 import { useOnline } from '../../lib/offline/OfflineContext';
 import { useProfile } from '../../lib/ProfileContext';
+import { atLeast } from '../../lib/roles';
 import { supabase } from '../../lib/supabase';
 import { toast } from '../../lib/toast';
 
@@ -75,7 +76,7 @@ export default function PembelianScreen() {
   const { profile } = useProfile();
   const { width } = useWindowDimensions();
   const isDesktop = width > 900;
-  const isManager = profile?.role === 'SUPERADMIN' || profile?.role === 'OWNER';
+  const isManager = atLeast(profile?.role, 'ADMIN'); // ADMIN+ may use purchasing
   const online = useOnline();
 
   // --- DATA STATE ---

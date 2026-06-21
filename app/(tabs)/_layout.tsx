@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AccountMenu from '../../components/AccountMenu';
 import PressableScale from '../../components/PressableScale';
 import { useProfile } from '../../lib/ProfileContext';
+import { atLeast } from '../../lib/roles';
 import { supabase } from '../../lib/supabase';
 
 export default function TabLayout() {
@@ -27,6 +28,7 @@ export default function TabLayout() {
   // Responsive Constants
   const isWeb = width > 768;
   const isManager = profile?.role === 'OWNER' || profile?.role === 'SUPERADMIN';
+  const isAdmin = atLeast(profile?.role, 'ADMIN'); // ADMIN+ : Setup / Pembelian / Pelanggan
 
   // Sidebar visibility state (for Web)
   const [collapsed, setCollapsed] = useState(false);
@@ -86,8 +88,8 @@ export default function TabLayout() {
               onPress={() => router.push('/(tabs)/kasir' as any)}
             />
 
-            {/* ADMNISTRASI SECTION (Owner Only) */}
-            {isManager && (
+            {/* Setup/Pembelian/Pelanggan = ADMIN+; Laporan/Pengguna/Retur = OWNER+ */}
+            {isAdmin && (
               <>
                 <Text
                   style={[styles.sidebarSection, { marginTop: 25 }, collapsed && { textAlign: 'center', fontSize: 8 }]}
@@ -101,20 +103,24 @@ export default function TabLayout() {
                   collapsed={collapsed}
                   onPress={() => router.push('/(tabs)/setup' as any)}
                 />
-                <SidebarItem
-                  icon="bar-chart-2"
-                  label="Laporan"
-                  collapsed={collapsed}
-                  active={pathname === '/laporan'}
-                  onPress={() => router.push('/(tabs)/laporan' as any)}
-                />
-                <SidebarItem
-                  icon="users"
-                  label="Pengguna"
-                  active={pathname === '/users'}
-                  collapsed={collapsed}
-                  onPress={() => router.push('/(tabs)/users' as any)}
-                />
+                {isManager && (
+                  <>
+                    <SidebarItem
+                      icon="bar-chart-2"
+                      label="Laporan"
+                      collapsed={collapsed}
+                      active={pathname === '/laporan'}
+                      onPress={() => router.push('/(tabs)/laporan' as any)}
+                    />
+                    <SidebarItem
+                      icon="users"
+                      label="Pengguna"
+                      active={pathname === '/users'}
+                      collapsed={collapsed}
+                      onPress={() => router.push('/(tabs)/users' as any)}
+                    />
+                  </>
+                )}
                 <SidebarItem
                   icon="truck"
                   label="Pembelian"
@@ -129,13 +135,15 @@ export default function TabLayout() {
                   collapsed={collapsed}
                   onPress={() => router.push('/(tabs)/pelanggan' as any)}
                 />
-                <SidebarItem
-                  icon="corner-up-left"
-                  label="Retur"
-                  active={pathname === '/retur'}
-                  collapsed={collapsed}
-                  onPress={() => router.push('/(tabs)/retur' as any)}
-                />
+                {isManager && (
+                  <SidebarItem
+                    icon="corner-up-left"
+                    label="Retur"
+                    active={pathname === '/retur'}
+                    collapsed={collapsed}
+                    onPress={() => router.push('/(tabs)/retur' as any)}
+                  />
+                )}
               </>
             )}
           </View>
@@ -185,7 +193,7 @@ export default function TabLayout() {
         <Tabs.Screen
           name="setup"
           options={{
-            href: isManager ? undefined : null,
+            href: isAdmin ? undefined : null,
             title: 'Setup',
             tabBarIcon: ({ color }) => <Feather name="settings" size={20} color={color} />,
           }}
@@ -216,7 +224,7 @@ export default function TabLayout() {
         <Tabs.Screen
           name="pembelian"
           options={{
-            href: isManager ? undefined : null,
+            href: isAdmin ? undefined : null,
             title: 'Pembelian',
             tabBarIcon: ({ color }) => <Feather name="truck" size={20} color={color} />,
           }}
@@ -224,7 +232,7 @@ export default function TabLayout() {
         <Tabs.Screen
           name="pelanggan"
           options={{
-            href: isManager ? undefined : null,
+            href: isAdmin ? undefined : null,
             title: 'Pelanggan',
             tabBarIcon: ({ color }) => <Feather name="user-check" size={20} color={color} />,
           }}
@@ -269,13 +277,13 @@ const PRIMARY_NAV = [
 ];
 
 const SECONDARY_NAV = [
-  { route: '/(tabs)/laporan', path: '/laporan', icon: 'bar-chart-2', label: 'Laporan' },
-  { route: '/(tabs)/setup', path: '/setup', icon: 'settings', label: 'Setup' },
-  { route: '/(tabs)/users', path: '/users', icon: 'users', label: 'Pengguna' },
-  { route: '/(tabs)/pembelian', path: '/pembelian', icon: 'truck', label: 'Pembelian' },
-  { route: '/(tabs)/pelanggan', path: '/pelanggan', icon: 'user-check', label: 'Pelanggan' },
-  { route: '/(tabs)/retur', path: '/retur', icon: 'corner-up-left', label: 'Retur' },
-];
+  { route: '/(tabs)/laporan', path: '/laporan', icon: 'bar-chart-2', label: 'Laporan', tier: 'OWNER' },
+  { route: '/(tabs)/setup', path: '/setup', icon: 'settings', label: 'Setup', tier: 'ADMIN' },
+  { route: '/(tabs)/users', path: '/users', icon: 'users', label: 'Pengguna', tier: 'OWNER' },
+  { route: '/(tabs)/pembelian', path: '/pembelian', icon: 'truck', label: 'Pembelian', tier: 'ADMIN' },
+  { route: '/(tabs)/pelanggan', path: '/pelanggan', icon: 'user-check', label: 'Pelanggan', tier: 'ADMIN' },
+  { route: '/(tabs)/retur', path: '/retur', icon: 'corner-up-left', label: 'Retur', tier: 'OWNER' },
+] as const;
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -316,7 +324,6 @@ function FloatingTabBar() {
   const pathname = usePathname();
   const { profile } = useProfile();
   const insets = useSafeAreaInsets();
-  const isManager = profile?.role === 'OWNER' || profile?.role === 'SUPERADMIN';
   const [moreOpen, setMoreOpen] = useState(false);
 
   const go = (route: string) => {
@@ -324,7 +331,7 @@ function FloatingTabBar() {
     router.push(route as any);
   };
   const onSecondary = SECONDARY_NAV.some(s => s.path === pathname);
-  const overflow = isManager ? SECONDARY_NAV : [];
+  const overflow = SECONDARY_NAV.filter(s => atLeast(profile?.role, s.tier));
 
   const logout = async () => {
     setMoreOpen(false);

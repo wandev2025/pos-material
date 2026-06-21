@@ -22,6 +22,7 @@ import {
   pingAgent,
   printDocument,
 } from '@/lib/printing';
+import { atLeast } from '@/lib/roles';
 import { supabase } from '@/lib/supabase';
 import { toast } from '@/lib/toast';
 
@@ -93,7 +94,7 @@ export default function SetupScreen() {
   const [newPayment, setNewPayment] = useState('');
 
   useEffect(() => {
-    if (profile?.role === 'OWNER' || profile?.role === 'SUPERADMIN') {
+    if (atLeast(profile?.role, 'ADMIN')) {
       loadAllData();
       refreshPaired();
     }
@@ -102,8 +103,7 @@ export default function SetupScreen() {
   // Only poll the local agent when a document actually uses it AND we're on the
   // Printers tab. Otherwise we'd hammer :3001 with refused connections.
   useEffect(() => {
-    const isManager = profile?.role === 'OWNER' || profile?.role === 'SUPERADMIN';
-    if (!isManager || activeTab !== 'PRINTERS' || !usesAgent) {
+    if (!atLeast(profile?.role, 'ADMIN') || activeTab !== 'PRINTERS' || !usesAgent) {
       setBridgeStatus('OFFLINE');
       return;
     }
@@ -334,10 +334,10 @@ node -e "const express=require('express');const cors=require('cors');const ptp=r
     );
   };
 
-  if (profile?.role !== 'OWNER' && profile?.role !== 'SUPERADMIN')
+  if (!atLeast(profile?.role, 'ADMIN'))
     return (
       <View style={styles.center}>
-        <Text>Akses Owner Diperlukan</Text>
+        <Text>Akses Admin Diperlukan</Text>
       </View>
     );
 
