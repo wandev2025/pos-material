@@ -56,19 +56,19 @@ export default function TabLayout() {
             
             <SidebarItem 
                 icon="home" label="Beranda" 
-                active={pathname === '/(tabs)'} 
+                active={pathname === '/'}
                 collapsed={collapsed} 
                 onPress={() => router.push('/(tabs)/' as any)} 
             />
             <SidebarItem 
                 icon="package" label="Stok Barang" 
-                active={pathname === '/(tabs)/inventory'} 
+                active={pathname === '/inventory'}
                 collapsed={collapsed} 
                 onPress={() => router.push('/(tabs)/inventory' as any)} 
             />
             <SidebarItem 
                 icon="shopping-cart" label="Input Pesanan" 
-                active={pathname === '/(tabs)/pos'} 
+                active={pathname === '/pos'}
                 collapsed={collapsed} 
                 onPress={() => router.push('/(tabs)/pos' as any)} 
             />
@@ -81,7 +81,7 @@ export default function TabLayout() {
                     </Text>
                     <SidebarItem 
                         icon="settings" label="Setup Sistem" 
-                        active={pathname === '/(tabs)/setup'} 
+                        active={pathname === '/setup'}
                         collapsed={collapsed} 
                         onPress={() => router.push('/(tabs)/setup' as any)} 
                     />
