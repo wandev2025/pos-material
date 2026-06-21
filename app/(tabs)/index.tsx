@@ -31,6 +31,13 @@ interface DashData {
 
 const startOfToday = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
 
+// Compact Rupiah for tight spots (chart bar labels): 3.200.000 -> "3,2jt", 850.000 -> "850rb".
+const compactRupiah = (n: number) => {
+  if (n >= 1_000_000) { const v = n / 1_000_000; return (v % 1 === 0 ? v.toFixed(0) : v.toFixed(1)).replace('.', ',') + 'jt'; }
+  if (n >= 1_000) return Math.round(n / 1_000) + 'rb';
+  return String(Math.round(n));
+};
+
 export default function Dashboard() {
   const { profile } = useProfile();
   const router = useRouter();
@@ -243,7 +250,10 @@ export default function Dashboard() {
           {/* 7-DAY OMZET CHART (manager) */}
           {isManager && d && (
             <Animated.View entering={FadeInDown.duration(240).delay(240)} style={[styles.card, isDesktop ? styles.half : styles.full]}>
-              <Text style={styles.cardTitle}>OMZET 7 HARI</Text>
+              <View style={styles.rowBetween}>
+                <Text style={styles.cardTitle}>OMZET 7 HARI</Text>
+                <Text style={styles.chartTotal}>{formatRupiah(d.chart.reduce((a, b) => a + b.total, 0))}</Text>
+              </View>
               <Chart bars={d.chart} height={isDesktop ? 200 : 90} />
             </Animated.View>
           )}
@@ -314,9 +324,10 @@ function MoneyBox({ bg, label, value, color, hint, onPress }: { bg: string; labe
 function Chart({ bars, height = 90 }: { bars: DayBar[]; height?: number }) {
   const max = Math.max(1, ...bars.map(b => b.total));
   return (
-    <View style={[styles.chart, { height: height + 20 }]}>
+    <View style={[styles.chart, { height: height + 40 }]}>
       {bars.map((b, i) => (
         <View key={i} style={styles.chartCol}>
+          <Text style={styles.chartVal} numberOfLines={1} adjustsFontSizeToFit>{b.total > 0 ? compactRupiah(b.total) : ''}</Text>
           <View style={[styles.chartTrack, { height }]}>
             <View style={[styles.chartBar, { height: `${Math.round((b.total / max) * 100)}%` }]} />
           </View>
@@ -384,6 +395,8 @@ const styles = StyleSheet.create({
   // Chart
   chart: { flexDirection: 'row', alignItems: 'flex-end', gap: 6 },
   chartCol: { flex: 1, alignItems: 'center' },
+  chartVal: { fontSize: 9, fontWeight: '800', color: '#64748B', marginBottom: 4, height: 14 },
+  chartTotal: { fontSize: 13, fontWeight: '900', color: '#DC2626' },
   chartTrack: { width: '100%', backgroundColor: '#F1F5F9', borderRadius: 6, justifyContent: 'flex-end', overflow: 'hidden' },
   chartBar: { width: '100%', backgroundColor: '#DC2626', borderRadius: 6 },
   chartLabel: { fontSize: 9, color: '#94A3B8', marginTop: 5, fontWeight: '700' },
