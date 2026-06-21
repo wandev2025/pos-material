@@ -3,10 +3,12 @@ import { Session, User } from '@supabase/supabase-js';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from './supabase';
 
+export type Role = 'SUPERADMIN' | 'OWNER' | 'ADMIN' | 'STAFF';
+
 type Profile = {
   id: string;
   full_name: string;
-  role: 'OWNER' | 'ADMIN' | 'STAFF'; // Add OWNER here
+  role: Role;
 };
 
 type ProfileContextType = {
