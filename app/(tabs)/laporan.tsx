@@ -240,7 +240,7 @@ export default function LaporanScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingHorizontal: isDesktop ? 20 : 14, paddingTop: 16, paddingBottom: 60 }}>
+    <ScrollView style={styles.container} contentContainerStyle={{ paddingHorizontal: isDesktop ? 20 : 14, paddingTop: 16, paddingBottom: isDesktop ? 60 : 120 }}>
       <View style={styles.headerRow}>
         <Text style={styles.title}>Laporan</Text>
         <View style={styles.exportBtns}>

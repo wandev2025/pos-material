@@ -16,7 +16,7 @@ import {
     useWindowDimensions,
     View
 } from 'react-native';
-import Animated, { FadeIn } from 'react-native-reanimated';
+import Animated, { FadeIn, SlideInDown } from 'react-native-reanimated';
 import { parseNum } from '../../lib/number';
 import { useProfile } from '../../lib/ProfileContext';
 import { supabase } from '../../lib/supabase';
@@ -34,6 +34,8 @@ interface InventoryItem {
   metrics?: { unit_name: string };
 }
 interface SplitTarget { _tempId: string; itemId: string; qty: string; }
+
+const AnimatedKAV = Animated.createAnimatedComponent(KeyboardAvoidingView);
 
 export default function InventoryScreen() {
   const { profile } = useProfile();
@@ -235,7 +237,7 @@ export default function InventoryScreen() {
       {/* MODAL: ADD MATERIAL */}
       <Modal visible={addModalVisible} transparent animationType="fade">
         <View style={[styles.modalOverlay, !isDesktop && styles.modalOverlayMobile]}>
-          <KeyboardAvoidingView behavior="padding" style={[styles.modalContent, isDesktop && { width: 550 }]}>
+          <AnimatedKAV entering={SlideInDown.duration(240)} behavior="padding" style={[styles.modalContent, isDesktop && { width: 550 }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Tambah Material Baru</Text>
               <TouchableOpacity onPress={() => setAddModalVisible(false)}><Feather name="x" size={24} /></TouchableOpacity>
@@ -267,7 +269,7 @@ export default function InventoryScreen() {
               </View>
               <TouchableOpacity style={styles.primaryBtn} onPress={handleSaveProduct}><Text style={styles.btnText}>SIMPAN DATA</Text></TouchableOpacity>
             </ScrollView>
-          </KeyboardAvoidingView>
+          </AnimatedKAV>
         </View>
       </Modal>
 

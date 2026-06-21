@@ -78,7 +78,7 @@ export default function UsersScreen() {
         <FlatList
           data={users}
           keyExtractor={(u) => u.id}
-          contentContainerStyle={{ paddingHorizontal: isDesktop ? 20 : 14, paddingVertical: 16 }}
+          contentContainerStyle={{ paddingHorizontal: isDesktop ? 20 : 14, paddingTop: 16, paddingBottom: isDesktop ? 16 : 120 }}
           ListEmptyComponent={<Text style={styles.empty}>Belum ada pengguna.</Text>}
           renderItem={({ item }) => {
             const isSelf = item.id === user?.id;
