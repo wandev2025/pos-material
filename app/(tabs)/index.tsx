@@ -60,7 +60,7 @@ export default function Dashboard() {
           <Text style={styles.cardTitle}>OVERVIEW HARI INI</Text>
           <Text style={styles.time}>{clock}</Text>
         </View>
-        <View style={styles.statsRow}>
+        <View style={[styles.statsRow, !isDesktop && { padding: 12 }]}>
           <StatItem label="SALES" value={String(stats.count)} unit="Nota" />
           <StatItem label="CASH" value={formatRupiah(stats.cash)} isRed />
           <StatItem label="DIGITAL" value={formatRupiah(stats.digital)} isRed />
@@ -93,7 +93,7 @@ function StatItem({ label, value, unit, isRed }: any) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F9FAFB' },
   content: { padding: 40 },
-  contentMobile: { paddingHorizontal: 14, paddingTop: 20, paddingBottom: 28 },
+  contentMobile: { paddingHorizontal: 14, paddingTop: 20, paddingBottom: 110 },
   welcome: { fontSize: 16, color: '#6B7280' },
   name: { fontSize: 36, fontWeight: '900', color: '#111827', marginBottom: 10 },
   quote: { fontStyle: 'italic', color: '#9CA3AF', textAlign: 'center', marginBottom: 40 },

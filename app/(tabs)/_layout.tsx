@@ -157,12 +157,13 @@ export default function TabLayout() {
    * MOBILE TAB LAYOUT
    */
   return (
-    <Tabs
-      tabBar={() => <FloatingTabBar />}
-      screenOptions={{
-        headerStyle: { backgroundColor: '#FFF', borderBottomColor: '#F3F4F6', borderBottomWidth: 1 },
-        headerTitleStyle: { fontWeight: '900', color: '#111827', fontSize: 18 },
-      }}>
+    <View style={{ flex: 1 }}>
+      <Tabs
+        screenOptions={{
+          headerStyle: { backgroundColor: '#FFF', borderBottomColor: '#F3F4F6', borderBottomWidth: 1 },
+          headerTitleStyle: { fontWeight: '900', color: '#111827', fontSize: 18 },
+          tabBarStyle: { display: 'none' },
+        }}>
       <Tabs.Screen 
         name="index" 
         options={{ title: 'Home', tabBarIcon: ({ color }) => <Feather name="home" size={20} color={color} /> }} 
@@ -203,7 +204,9 @@ export default function TabLayout() {
         name="retur"
         options={{ href: isManager ? undefined : null, title: 'Retur', tabBarIcon: ({ color }) => <Feather name="corner-up-left" size={20} color={color} /> }}
       />
-    </Tabs>
+      </Tabs>
+      <FloatingTabBar />
+    </View>
   );
 }
 
@@ -266,8 +269,8 @@ function FloatingTabBar() {
   // The bar: a morphing pill of primary tabs + a trailing circle. The circle is
   // a grid (opens the overflow); while open it becomes a close (✕) in the exact
   // same spot to return to the original bar.
-  const renderRow = (circle: 'grid' | 'close') => (
-    <View style={[tabStyles.wrap, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+  const renderRow = (circle: 'grid' | 'close', wrapStyle: any, pe: 'box-none' | 'auto') => (
+    <View style={[wrapStyle, { paddingBottom: Math.max(insets.bottom, 10) }]} pointerEvents={pe}>
       <View style={tabStyles.pill}>
         {PRIMARY_NAV.map((item) => {
           const active = pathname === item.path;
@@ -291,7 +294,7 @@ function FloatingTabBar() {
 
   return (
     <>
-      {renderRow('grid')}
+      {renderRow('grid', tabStyles.overlayWrap, 'box-none')}
 
       <Modal visible={moreOpen} transparent animationType="fade" onRequestClose={() => setMoreOpen(false)}>
         <View style={tabStyles.modalRoot}>
@@ -316,7 +319,7 @@ function FloatingTabBar() {
               })}
             </View>
           </View>
-          {renderRow('close')}
+          {renderRow('close', tabStyles.barRow, 'auto')}
         </View>
       </Modal>
     </>
@@ -324,7 +327,8 @@ function FloatingTabBar() {
 }
 
 const tabStyles = StyleSheet.create({
-  wrap: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10, paddingTop: 10, backgroundColor: 'transparent' },
+  overlayWrap: { position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10, paddingTop: 10 },
+  barRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10, paddingTop: 10 },
   pill: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', borderRadius: 30, paddingHorizontal: 6, paddingVertical: 6, gap: 4, shadowColor: '#0F172A', shadowOpacity: 0.12, shadowRadius: 16, shadowOffset: { width: 0, height: 6 }, elevation: 10 },
   tab: { height: 48, minWidth: 48, borderRadius: 24, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 4 },
   tabActive: { backgroundColor: '#DC2626', paddingHorizontal: 16 },
