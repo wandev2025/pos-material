@@ -3,7 +3,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { createElement, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -27,6 +26,7 @@ import Animated, {
 import CommandPalette from '../../components/CommandPalette';
 import PressableScale from '../../components/PressableScale';
 import { DeliveryOrderPreview, InvoicePreview, ThermalPreview } from '../../components/PrintPreviews';
+import { confirm } from '../../lib/confirm';
 import { parseNum } from '../../lib/number';
 import { useOnline } from '../../lib/offline/OfflineContext';
 import { useProfile } from '../../lib/ProfileContext';
@@ -117,16 +117,6 @@ const formatRupiah = (n: number) =>
 
 const generateId = () => Math.random().toString(36).substring(2, 15);
 
-const emptyRow = (): SaleRow => ({
-  _id: generateId(),
-  item: null,
-  query: '',
-  qty: '1',
-  price: '0',
-  discount: '0',
-  total: '0',
-});
-
 const MONO_STACK = Platform.select({
   ios: 'Courier New',
   android: 'monospace',
@@ -161,14 +151,11 @@ export default function UnifiedPOSHub() {
   const [discountRows, setDiscountRows] = useState<string[]>([]); // cart rows whose per-line discount input is revealed
   const [showDiscount, setShowDiscount] = useState(false);
   const [rows, setRows] = useState<SaleRow[]>([]);
-  const [filteredInv, setFilteredInv] = useState<InventoryItem[]>([]);
-  const [catalogQuery, setCatalogQuery] = useState('');
   const [popularItems, setPopularItems] = useState<InventoryItem[]>([]);
   // Command-palette item picker (opens with the "/" key on desktop)
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteAll, setPaletteAll] = useState<InventoryItem[]>([]);
   const [paletteLoading, setPaletteLoading] = useState(false);
-  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Modal States
   const [printModal, setPrintModal] = useState(false);
@@ -333,28 +320,6 @@ export default function UnifiedPOSHub() {
   const checkoutBlocked = loading || !online || !!checkoutBlock;
 
   // --- POS ACTIONS ---
-  // --- CATALOG: one search bar + favorites feed the cart (tap or Enter = add) ---
-  const catalogSearch = (text: string) => {
-    setCatalogQuery(text);
-    if (searchTimer.current) clearTimeout(searchTimer.current);
-    const q = text.trim();
-    if (!q) {
-      setFilteredInv([]);
-      return;
-    }
-
-    // Server-side search so a catalog of thousands stays fast (only matches are fetched).
-    searchTimer.current = setTimeout(async () => {
-      const { data } = await supabase
-        .from('inventory')
-        .select('*')
-        .ilike('item_name', `%${q}%`)
-        .order('item_name')
-        .limit(25);
-      setFilteredInv((data as InventoryItem[]) || []);
-    }, 250);
-  };
-
   // Tapping a product adds a line; tapping one already in the cart bumps its qty.
   const addItemToCart = (item: InventoryItem) => {
     setRows(prev => {
@@ -477,7 +442,12 @@ export default function UnifiedPOSHub() {
 
     // Server-side search keeps a large customer base fast (only matches fetched).
     customerTimer.current = setTimeout(async () => {
-      const { data } = await supabase.from('customers').select('*').ilike('name', `%${q}%`).order('name').limit(8);
+      const { data } = await supabase
+        .from('customers')
+        .select('*')
+        .or(`name.ilike.%${q}%,phone.ilike.%${q}%`)
+        .order('name')
+        .limit(8);
       setCustomerResults((data as Customer[]) || []);
     }, 250);
   };
@@ -582,8 +552,6 @@ export default function UnifiedPOSHub() {
   const resetPOS = () => {
     setRows([]);
     setDiscountRows([]);
-    setCatalogQuery('');
-    setFilteredInv([]);
     setCustomerName('Umum');
     setSelectedCustomerId(null);
     setCustomerResults([]);
@@ -679,28 +647,26 @@ export default function UnifiedPOSHub() {
     }
   };
 
-  const handleDeleteSale = (sale: Sale) => {
-    Alert.alert('Hapus Transaksi', 'Data stok akan dikembalikan dan transaksi dihapus permanen. Lanjutkan?', [
-      { text: 'Batal', style: 'cancel' },
-      {
-        text: 'Hapus',
-        style: 'destructive',
-        onPress: async () => {
-          setLoading(true);
-          try {
-            // Atomic: restocks the items and removes the sale in one transaction.
-            const { error } = await supabase.rpc('delete_sale', { p_sale_id: sale.id });
-            if (error) throw error;
-            loadHistory();
-            loadInitialData();
-          } catch (e: any) {
-            toast.error(e.message);
-          } finally {
-            setLoading(false);
-          }
-        },
-      },
-    ]);
+  const handleDeleteSale = async (sale: Sale) => {
+    const ok = await confirm({
+      title: 'Hapus Transaksi',
+      message: 'Data stok akan dikembalikan dan transaksi dihapus permanen. Lanjutkan?',
+      confirmText: 'Hapus',
+      danger: true,
+    });
+    if (!ok) return;
+    setLoading(true);
+    try {
+      // Atomic: restocks the items and removes the sale in one transaction.
+      const { error } = await supabase.rpc('delete_sale', { p_sale_id: sale.id });
+      if (error) throw error;
+      loadHistory();
+      loadInitialData();
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const executePrint = async (type: DocType) => {
@@ -753,16 +719,6 @@ export default function UnifiedPOSHub() {
   };
 
   // --- SUB-COMPONENTS ---
-  const renderSuggestItem = (item: InventoryItem) => (
-    <TouchableOpacity key={item.id} style={styles.suggestItem} onPress={() => addItemToCart(item)}>
-      <Text style={{ fontWeight: 'bold', color: '#0F172A' }}>{item.item_name}</Text>
-      <Text style={[styles.mono, { fontSize: 11, color: '#64748B' }]}>
-        {formatRupiah(item.price)} • Stok: {item.quantity}
-        {item.allow_preorder ? ' • Pre-order' : ''}
-      </Text>
-    </TouchableOpacity>
-  );
-
   const renderStepper = (row: SaleRow, extra?: ViewStyle) => (
     <View style={[styles.qtyStepper, extra]}>
       <TouchableOpacity style={styles.stepBtn} onPress={() => stepQty(row._id, -1)}>
@@ -926,7 +882,7 @@ export default function UnifiedPOSHub() {
       <Text style={styles.sectionTitle}>PEMBAYARAN</Text>
 
       <View style={[styles.mb15, { position: 'relative', zIndex: 30 }]}>
-        <Text style={styles.label}>Nama Pelanggan</Text>
+        <Text style={styles.label}>Nama Pelanggan / No. Telepon</Text>
         <TextInput
           style={styles.input}
           value={customerName}
