@@ -88,7 +88,7 @@ export default function TabLayout() {
                     <SidebarItem 
                         icon="bar-chart-2" label="Laporan" 
                         collapsed={collapsed} 
-                        onPress={() => {}} 
+                        active={pathname === '/laporan'} onPress={() => router.push('/(tabs)/laporan' as any)} 
                     />
                     <SidebarItem
                         icon="users" label="Pengguna"
@@ -158,6 +158,10 @@ export default function TabLayout() {
       <Tabs.Screen
         name="users"
         options={{ href: isManager ? undefined : null, title: 'Pengguna', tabBarIcon: ({ color }) => <Feather name="users" size={20} color={color} /> }}
+      />
+      <Tabs.Screen
+        name="laporan"
+        options={{ href: isManager ? undefined : null, title: 'Laporan', tabBarIcon: ({ color }) => <Feather name="bar-chart-2" size={20} color={color} /> }}
       />
     </Tabs>
   );
