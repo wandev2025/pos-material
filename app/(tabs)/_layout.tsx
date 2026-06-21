@@ -253,16 +253,20 @@ function FloatingTabBar() {
   const isManager = profile?.role === 'OWNER' || profile?.role === 'SUPERADMIN';
   const [moreOpen, setMoreOpen] = useState(false);
 
-  const go = (route: string) => router.push(route as any);
+  const go = (route: string) => { setMoreOpen(false); router.push(route as any); };
   const onSecondary = SECONDARY_NAV.some((s) => s.path === pathname);
   const overflow = isManager ? SECONDARY_NAV : [];
 
   const logout = async () => {
+    setMoreOpen(false);
     await supabase.auth.signOut();
     router.replace('/login' as any);
   };
 
-  return (
+  // The bar: a morphing pill of primary tabs + a trailing circle. The circle is
+  // a grid (opens the overflow); while open it becomes a close (✕) in the exact
+  // same spot to return to the original bar.
+  const renderRow = (circle: 'grid' | 'close') => (
     <View style={[tabStyles.wrap, { paddingBottom: Math.max(insets.bottom, 10) }]}>
       <View style={tabStyles.pill}>
         {PRIMARY_NAV.map((item) => {
@@ -275,20 +279,34 @@ function FloatingTabBar() {
           );
         })}
       </View>
-
-      <TouchableOpacity activeOpacity={0.85} onPress={() => setMoreOpen(true)} style={[tabStyles.circle, onSecondary && tabStyles.circleActive]}>
-        <Feather name="grid" size={22} color={onSecondary ? '#FFF' : '#0F172A'} />
+      <TouchableOpacity
+        activeOpacity={0.85}
+        onPress={() => setMoreOpen(circle === 'grid')}
+        style={[tabStyles.circle, (circle === 'close' || onSecondary) && tabStyles.circleActive]}
+      >
+        <Feather name={circle === 'grid' ? 'grid' : 'x'} size={22} color={(circle === 'close' || onSecondary) ? '#FFF' : '#0F172A'} />
       </TouchableOpacity>
+    </View>
+  );
+
+  return (
+    <>
+      {renderRow('grid')}
 
       <Modal visible={moreOpen} transparent animationType="fade" onRequestClose={() => setMoreOpen(false)}>
-        <TouchableOpacity activeOpacity={1} style={tabStyles.overlay} onPress={() => setMoreOpen(false)}>
-          <TouchableOpacity activeOpacity={1} style={tabStyles.sheet} onPress={() => {}}>
+        <View style={tabStyles.modalRoot}>
+          <TouchableOpacity activeOpacity={1} style={StyleSheet.absoluteFill} onPress={() => setMoreOpen(false)} />
+          <View style={tabStyles.popover}>
+            <TouchableOpacity style={tabStyles.logoutBtn} onPress={logout}>
+              <Feather name="log-out" size={18} color="#DC2626" />
+              <Text style={tabStyles.logoutText}>Keluar</Text>
+            </TouchableOpacity>
             <Text style={tabStyles.sheetTitle}>MENU LAINNYA</Text>
             <View style={tabStyles.grid}>
               {overflow.map((item) => {
                 const active = pathname === item.path;
                 return (
-                  <TouchableOpacity key={item.path} style={tabStyles.tile} onPress={() => { setMoreOpen(false); go(item.route); }}>
+                  <TouchableOpacity key={item.path} style={tabStyles.tile} onPress={() => go(item.route)}>
                     <View style={[tabStyles.tileIcon, active && tabStyles.tileIconActive]}>
                       <Feather name={item.icon as any} size={20} color={active ? '#FFF' : '#DC2626'} />
                     </View>
@@ -297,14 +315,11 @@ function FloatingTabBar() {
                 );
               })}
             </View>
-            <TouchableOpacity style={tabStyles.logoutBtn} onPress={() => { setMoreOpen(false); logout(); }}>
-              <Feather name="log-out" size={18} color="#DC2626" />
-              <Text style={tabStyles.logoutText}>Keluar</Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </TouchableOpacity>
+          </View>
+          {renderRow('close')}
+        </View>
       </Modal>
-    </View>
+    </>
   );
 }
 
@@ -316,15 +331,15 @@ const tabStyles = StyleSheet.create({
   tabLabel: { color: '#FFF', fontWeight: '800', fontSize: 13 },
   circle: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#FFF', alignItems: 'center', justifyContent: 'center', shadowColor: '#0F172A', shadowOpacity: 0.12, shadowRadius: 16, shadowOffset: { width: 0, height: 6 }, elevation: 10 },
   circleActive: { backgroundColor: '#DC2626' },
-  overlay: { flex: 1, backgroundColor: 'rgba(15,23,42,0.5)', justifyContent: 'flex-end' },
-  sheet: { backgroundColor: '#FFF', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: 40 },
-  sheetTitle: { fontSize: 11, fontWeight: '900', color: '#94A3B8', letterSpacing: 1.2, marginBottom: 18 },
+  modalRoot: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(15,23,42,0.5)' },
+  popover: { backgroundColor: '#FFF', borderRadius: 24, marginHorizontal: 12, marginBottom: 8, padding: 20, shadowColor: '#0F172A', shadowOpacity: 0.15, shadowRadius: 20, shadowOffset: { width: 0, height: 8 }, elevation: 12 },
+  sheetTitle: { fontSize: 11, fontWeight: '900', color: '#94A3B8', letterSpacing: 1.2, marginTop: 18, marginBottom: 16 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 18, columnGap: 12 },
   tile: { width: '22%', alignItems: 'center', gap: 8 },
   tileIcon: { width: 54, height: 54, borderRadius: 18, backgroundColor: '#FEF2F2', alignItems: 'center', justifyContent: 'center' },
   tileIconActive: { backgroundColor: '#DC2626' },
   tileLabel: { fontSize: 11, color: '#475569', fontWeight: '600', textAlign: 'center' },
-  logoutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 26, padding: 15, borderRadius: 14, borderWidth: 1, borderColor: '#FEE2E2' },
+  logoutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, padding: 15, borderRadius: 14, borderWidth: 1, borderColor: '#FEE2E2' },
   logoutText: { color: '#DC2626', fontWeight: '800', fontSize: 14 },
 });
 
