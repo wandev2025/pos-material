@@ -35,7 +35,7 @@ export const ProfileProvider = ({ children }: { children: React.ReactNode }) => 
       else setIsLoading(false);
     });
 
-    supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       if (session?.user) fetchProfile(session.user.id);
       else {
@@ -43,6 +43,8 @@ export const ProfileProvider = ({ children }: { children: React.ReactNode }) => 
         setIsLoading(false);
       }
     });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const fetchProfile = async (userId: string) => {
