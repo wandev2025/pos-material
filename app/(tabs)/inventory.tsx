@@ -9,6 +9,7 @@ import {
     Platform,
     ScrollView,
     StyleSheet,
+    Switch,
     Text,
     TextInput,
     TouchableOpacity,
@@ -28,6 +29,7 @@ interface InventoryItem {
   price: number;
   min_stock: number;
   metric_id: number;
+  allow_preorder?: boolean;
   metrics?: { unit_name: string };
 }
 interface SplitTarget { _tempId: string; itemId: string; qty: string; }
@@ -36,7 +38,7 @@ export default function InventoryScreen() {
   const { profile } = useProfile();
   const { width } = useWindowDimensions();
   const isDesktop = width > 768;
-  const isOwner = profile?.role === 'OWNER';
+  const isManager = profile?.role === 'SUPERADMIN' || profile?.role === 'OWNER';
 
   // --- STATE ---
   const [loading, setLoading] = useState(true);
@@ -55,6 +57,7 @@ export default function InventoryScreen() {
   const [formPrice, setFormPrice] = useState('');
   const [formMinStock, setFormMinStock] = useState('5');
   const [formMetricId, setFormMetricId] = useState<string>("");
+  const [formAllowPreorder, setFormAllowPreorder] = useState(false);
 
   // Targeted Item
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
@@ -90,7 +93,8 @@ export default function InventoryScreen() {
       item_name: formName,
       price: parseNum(formPrice),
       min_stock: parseNum(formMinStock),
-      metric_id: parseInt(formMetricId)
+      metric_id: parseInt(formMetricId),
+      allow_preorder: formAllowPreorder
     };
 
     let error;
@@ -161,7 +165,7 @@ export default function InventoryScreen() {
 
   // --- LOGIC: DELETE ---
   const handleDeleteProduct = async () => {
-    if (!isOwner || !selectedItem) return;
+    if (!isManager || !selectedItem) return;
     const performDelete = async () => {
       const { error } = await supabase.from('inventory').delete().eq('id', selectedItem.id);
       if (!error) { setEditModalVisible(false); fetchData(); }
@@ -177,6 +181,7 @@ export default function InventoryScreen() {
     setFormPrice(item.price.toString());
     setFormMinStock(item.min_stock.toString());
     setFormMetricId(item.metric_id.toString());
+    setFormAllowPreorder(item.allow_preorder ?? false);
     setStockAdjustment('');
     setEditModalVisible(true);
   };
@@ -207,6 +212,7 @@ export default function InventoryScreen() {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.itemName}>{item.item_name}</Text>
                   <Text style={styles.itemPrice}>Rp {item.price.toLocaleString()}</Text>
+                  {item.allow_preorder && <Text style={styles.poBadge}>PRE-ORDER</Text>}
                 </View>
                 <View style={{ alignItems: 'flex-end' }}>
                     <Text style={[styles.itemQty, isLow && {color: '#DC2626'}]}>{item.quantity} {item.metrics?.unit_name}</Text>
@@ -219,7 +225,7 @@ export default function InventoryScreen() {
       )}
 
       {/* FAB: ADD */}
-      <TouchableOpacity style={styles.fab} onPress={() => { setSelectedItem(null); setFormName(''); setFormQty(''); setFormPrice(''); setFormMinStock('5'); setAddModalVisible(true); }}>
+      <TouchableOpacity style={styles.fab} onPress={() => { setSelectedItem(null); setFormName(''); setFormQty(''); setFormPrice(''); setFormMinStock('5'); setFormAllowPreorder(false); setAddModalVisible(true); }}>
         <Feather name="plus" size={30} color="#FFF" />
       </TouchableOpacity>
 
@@ -248,6 +254,13 @@ export default function InventoryScreen() {
                         </Picker>
                     </View>
                 </View>
+              </View>
+              <View style={styles.switchRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.label}>Bisa Pre-order</Text>
+                  <Text style={styles.switchHint}>Tetap bisa dijual walau stok habis</Text>
+                </View>
+                <Switch value={formAllowPreorder} onValueChange={setFormAllowPreorder} trackColor={{ true: '#DC2626' }} />
               </View>
               <TouchableOpacity style={styles.primaryBtn} onPress={handleSaveProduct}><Text style={styles.btnText}>SIMPAN DATA</Text></TouchableOpacity>
             </ScrollView>
@@ -279,6 +292,14 @@ export default function InventoryScreen() {
                     <View style={{flex:1}}><Text style={styles.label}>Minim</Text><TextInput style={styles.input} keyboardType="numeric" value={formMinStock} onChangeText={setFormMinStock}/></View>
                 </View>
 
+                <View style={styles.switchRow}>
+                    <View style={{ flex: 1 }}>
+                        <Text style={styles.label}>Bisa Pre-order</Text>
+                        <Text style={styles.switchHint}>Tetap bisa dijual walau stok habis</Text>
+                    </View>
+                    <Switch value={formAllowPreorder} onValueChange={setFormAllowPreorder} trackColor={{ true: '#DC2626' }} />
+                </View>
+
                 <TouchableOpacity style={[styles.primaryBtn, {backgroundColor:'#111827'}]} onPress={handleSaveProduct}><Text style={styles.btnText}>SIMPAN PERUBAHAN INFO</Text></TouchableOpacity>
 
                 <TouchableOpacity style={styles.splitBtn} onPress={() => { setEditModalVisible(false); setSplitModalVisible(true); }}>
@@ -286,7 +307,7 @@ export default function InventoryScreen() {
                     <Text style={styles.splitBtnText}>PECAH STOK (SPLIT)</Text>
                 </TouchableOpacity>
 
-                {isOwner && (
+                {isManager && (
                     <TouchableOpacity style={styles.deleteBtn} onPress={handleDeleteProduct}>
                         <Feather name="trash-2" size={16} color="#DC2626" />
                         <Text style={{color:'#DC2626', marginLeft:10, fontWeight:'700'}}>Hapus Permanen</Text>
@@ -376,5 +397,8 @@ const styles = StyleSheet.create({
 
   sourceBox: { padding: 15, backgroundColor: '#F9FAFB', borderRadius: 15, borderWidth: 1, borderColor: '#E5E7EB' },
   splitRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
-  addSplitBtn: { padding: 12, alignItems: 'center', borderStyle: 'dashed', borderWidth: 1, borderColor: '#DC2626', borderRadius: 12, marginTop: 10 }
+  addSplitBtn: { padding: 12, alignItems: 'center', borderStyle: 'dashed', borderWidth: 1, borderColor: '#DC2626', borderRadius: 12, marginTop: 10 },
+  switchRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, padding: 14, marginBottom: 15 },
+  switchHint: { fontSize: 11, color: '#94A3B8', marginTop: 2 },
+  poBadge: { fontSize: 9, fontWeight: '900', color: '#7C3AED', marginTop: 4 }
 });

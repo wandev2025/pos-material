@@ -37,6 +37,11 @@
 -- the app reads/writes today).
 -- =============================================================================
 
+-- Per-item preorder flag: when true the item can be sold even if stock is
+-- insufficient (stock simply goes negative), so an out-of-stock item the owner
+-- actually has — but forgot to restock in the app — never blocks a sale.
+alter table inventory add column if not exists allow_preorder boolean not null default false;
+
 -- Create a sale + its items and decrement stock, all-or-nothing.
 create or replace function create_sale(p_sale jsonb, p_items jsonb)
 returns sales
@@ -71,7 +76,7 @@ begin
     update inventory
        set quantity = quantity - (v_item->>'quantity')::numeric
      where id = (v_item->>'inventory_id')::bigint
-       and quantity >= (v_item->>'quantity')::numeric;
+       and (quantity >= (v_item->>'quantity')::numeric or allow_preorder);
 
     if not found then
       raise exception 'Stok tidak cukup untuk %', v_item->>'item_name';
@@ -123,7 +128,7 @@ begin
     update inventory
        set quantity = quantity - (v_item->>'quantity')::numeric
      where id = (v_item->>'inventory_id')::bigint
-       and quantity >= (v_item->>'quantity')::numeric;
+       and (quantity >= (v_item->>'quantity')::numeric or allow_preorder);
 
     if not found then
       raise exception 'Stok tidak cukup untuk %', v_item->>'item_name';
