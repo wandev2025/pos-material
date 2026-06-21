@@ -148,12 +148,12 @@ node -e "const express=require('express');const cors=require('cors');const ptp=r
         <SubBtn id="PAYMENT" label="Metode Bayar" icon="credit-card" active={activeTab} set={setActiveTab} />
       </View>
 
-      <ScrollView style={styles.content}>
+      <ScrollView style={[styles.content, !isDesktop && styles.contentMobile]}>
         {loading && <ActivityIndicator color="#DC2626" style={{marginBottom: 20}} />}
 
         {/* TAB: INFO */}
         {activeTab === 'INFO' && (
-          <View style={styles.card}>
+          <View style={[styles.card, !isDesktop && styles.cardMobile]}>
             <Text style={styles.cardTitle}>Profil Toko</Text>
             <Text style={styles.label}>Nama Bisnis</Text>
             <TextInput style={styles.input} value={settings.shop_name} onChangeText={t => setSettings({...settings, shop_name: t})} />
@@ -173,7 +173,7 @@ node -e "const express=require('express');const cors=require('cors');const ptp=r
 
         {/* TAB: PRINTERS */}
         {activeTab === 'PRINTERS' && (
-          <View style={styles.card}>
+          <View style={[styles.card, !isDesktop && styles.cardMobile]}>
             <Text style={styles.cardTitle}>Hardware & Silent Print</Text>
             
             {bridgeStatus === 'OFFLINE' ? (
@@ -213,7 +213,7 @@ node -e "const express=require('express');const cors=require('cors');const ptp=r
 
         {/* TAB: METRICS & PAYMENT */}
         {(activeTab === 'METRICS' || activeTab === 'PAYMENT') && (
-            <View style={styles.card}>
+            <View style={[styles.card, !isDesktop && styles.cardMobile]}>
                 <Text style={styles.cardTitle}>{activeTab === 'METRICS' ? 'Manajemen Satuan' : 'Metode Pembayaran'}</Text>
                 <View style={styles.row}>
                     <TextInput 
@@ -289,7 +289,9 @@ const styles = StyleSheet.create({
   subLabel: { marginLeft: 12, fontWeight: '700', color: '#64748B' },
   subLabelActive: { color: '#DC2626' },
   content: { flex: 1, padding: 25 },
+  contentMobile: { padding: 14 },
   card: { backgroundColor: '#FFF', padding: 30, borderRadius: 20, maxWidth: 600, alignSelf: 'center', width: '100%' },
+  cardMobile: { padding: 18 },
   cardTitle: { fontSize: 18, fontWeight: '800', marginBottom: 20 },
   label: { fontSize: 11, fontWeight: '800', color: '#94A3B8', textTransform: 'uppercase' },
   input: { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 10, padding: 14, marginBottom: 20 },

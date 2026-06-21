@@ -201,7 +201,7 @@ export default function InventoryScreen() {
       {loading && !addModalVisible ? <ActivityIndicator style={{marginTop: 50}} color="#DC2626" /> : (
         <FlatList
           data={inventory.filter(i => i.item_name.toLowerCase().includes(search.toLowerCase()))}
-          contentContainerStyle={{ padding: isDesktop ? 40 : 20 }}
+          contentContainerStyle={{ padding: isDesktop ? 40 : 14 }}
           renderItem={({ item }) => {
             const isLow = item.quantity <= item.min_stock;
             return (
@@ -231,7 +231,7 @@ export default function InventoryScreen() {
 
       {/* MODAL: ADD MATERIAL */}
       <Modal visible={addModalVisible} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
+        <View style={[styles.modalOverlay, !isDesktop && styles.modalOverlayMobile]}>
           <KeyboardAvoidingView behavior="padding" style={[styles.modalContent, isDesktop && { width: 550 }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Tambah Material Baru</Text>
@@ -270,7 +270,7 @@ export default function InventoryScreen() {
 
       {/* MODAL: OPTIONS / EDIT */}
       <Modal visible={editModalVisible} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
+        <View style={[styles.modalOverlay, !isDesktop && styles.modalOverlayMobile]}>
           <View style={[styles.modalContent, isDesktop && { width: 500 }]}>
              <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>Opsi & Edit</Text>
@@ -320,7 +320,7 @@ export default function InventoryScreen() {
 
       {/* MODAL: SPLIT STOCK LOGIC */}
       <Modal visible={splitModalVisible} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
+        <View style={[styles.modalOverlay, !isDesktop && styles.modalOverlayMobile]}>
             <View style={[styles.modalContent, isDesktop && { width: 650 }]}>
                 <View style={styles.modalHeader}>
                     <Text style={styles.modalTitle}>Pecah Stok</Text>
@@ -377,6 +377,7 @@ const styles = StyleSheet.create({
   fab: { position: 'absolute', bottom: 30, right: 30, width: 60, height: 60, borderRadius: 20, backgroundColor: '#DC2626', justifyContent: 'center', alignItems: 'center', elevation: 5 },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  modalOverlayMobile: { padding: 0 },
   modalContent: { backgroundColor: '#FFF', borderRadius: 28, padding: 30, width: '100%', maxHeight: '95%' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   modalTitle: { fontSize: 18, fontWeight: '900', color: '#111827' },

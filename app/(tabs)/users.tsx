@@ -2,7 +2,7 @@ import { Feather } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator, Alert, FlatList, Platform,
-  StyleSheet, Text, TouchableOpacity, View
+  StyleSheet, Text, TouchableOpacity, useWindowDimensions, View
 } from 'react-native';
 import { Role, useProfile } from '../../lib/ProfileContext';
 import { supabase } from '../../lib/supabase';
@@ -22,6 +22,8 @@ const ROLE_COLORS: Record<Role, string> = {
 
 export default function UsersScreen() {
   const { profile, user } = useProfile();
+  const { width } = useWindowDimensions();
+  const isDesktop = width > 768;
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<UserRow[]>([]);
 
@@ -75,7 +77,7 @@ export default function UsersScreen() {
         <FlatList
           data={users}
           keyExtractor={(u) => u.id}
-          contentContainerStyle={{ padding: 20 }}
+          contentContainerStyle={{ paddingHorizontal: isDesktop ? 20 : 14, paddingVertical: 16 }}
           ListEmptyComponent={<Text style={styles.empty}>Belum ada pengguna.</Text>}
           renderItem={({ item }) => {
             const isSelf = item.id === user?.id;

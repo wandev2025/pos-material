@@ -414,58 +414,93 @@ export default function UnifiedPOSHub() {
   };
 
   // --- SUB-COMPONENTS ---
+  const renderSearchCell = (row: SaleRow) => (
+    <View style={{ position: 'relative' }}>
+      <TextInput
+        style={styles.cellInput}
+        placeholder="Cari item..."
+        value={row.query}
+        onChangeText={t => handleSearch(t, row._id)}
+        onFocus={() => setActiveRowId(row._id)}
+      />
+      {activeRowId === row._id && filteredInv.length > 0 && (
+        <View style={styles.suggestBox}>
+          <ScrollView keyboardShouldPersistTaps="handled" nestedScrollEnabled style={{ maxHeight: 200 }}>
+            {filteredInv.map(item => (
+              <TouchableOpacity key={item.id} style={styles.suggestItem} onPress={() => selectItem(item, row._id)}>
+                <Text style={{ fontWeight: 'bold', color: '#0F172A' }}>{item.item_name}</Text>
+                <Text style={[styles.mono, { fontSize: 11, color: '#64748B' }]}>{formatRupiah(item.price)} • Stok: {item.quantity}{item.allow_preorder ? ' • Pre-order' : ''}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+    </View>
+  );
+
+  const renderStepper = (row: SaleRow, extra?: ViewStyle) => (
+    <View style={[styles.qtyStepper, extra]}>
+      <TouchableOpacity style={styles.stepBtn} onPress={() => stepQty(row._id, -1)}>
+        <Ionicons name="remove" size={16} color="#0F172A" />
+      </TouchableOpacity>
+      <TextInput style={[styles.mono, styles.qtyInput]} keyboardType="numeric" value={row.qty} onChangeText={t => updateRow(row._id, 'qty', t)} />
+      <TouchableOpacity style={styles.stepBtn} onPress={() => stepQty(row._id, 1)}>
+        <Ionicons name="add" size={16} color="#0F172A" />
+      </TouchableOpacity>
+    </View>
+  );
+
   const renderInputTable = () => (
     <View style={styles.card}>
       <Text style={styles.sectionTitle}>DETAIL PESANAN</Text>
-      <View style={styles.tableHead}>
-        <Text style={[styles.th, { flex: 2.6 }]}>BARANG</Text>
-        <Text style={[styles.th, { flex: 0.8, textAlign: 'center' }]}>STOK</Text>
-        <Text style={[styles.th, { flex: 1.8, textAlign: 'center' }]}>QTY</Text>
-        <Text style={[styles.th, { flex: 1.3, textAlign: 'center' }]}>HARGA</Text>
-        <Text style={[styles.th, { flex: 1.5, textAlign: 'right', paddingRight: 10 }]}>TOTAL</Text>
-        <View style={{ width: 30 }} />
-      </View>
 
-      {rows.map((row) => (
-        <View key={row._id} style={[styles.tableRow, { zIndex: activeRowId === row._id ? 100 : 1 }]}>
-          <View style={{ flex: 2.6 }}>
-            <TextInput
-              style={styles.cellInput}
-              placeholder="Cari item..."
-              value={row.query} 
-              onChangeText={t => handleSearch(t, row._id)} 
-              onFocus={() => setActiveRowId(row._id)}
-            />
-            {activeRowId === row._id && filteredInv.length > 0 && (
-              <View style={styles.suggestBox}>
-                <ScrollView keyboardShouldPersistTaps="handled" nestedScrollEnabled style={{maxHeight: 200}}>
-                  {filteredInv.map(item => (
-                    <TouchableOpacity key={item.id} style={styles.suggestItem} onPress={() => selectItem(item, row._id)}>
-                      <Text style={{ fontWeight: 'bold', color: '#0F172A' }}>{item.item_name}</Text>
-                      <Text style={[styles.mono, { fontSize: 11, color: '#64748B' }]}>{formatRupiah(item.price)} • Stok: {item.quantity}{item.allow_preorder ? ' • Pre-order' : ''}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
+      {isDesktop ? (
+        <>
+          <View style={styles.tableHead}>
+            <Text style={[styles.th, { flex: 2.6 }]}>BARANG</Text>
+            <Text style={[styles.th, { flex: 0.8, textAlign: 'center' }]}>STOK</Text>
+            <Text style={[styles.th, { flex: 1.8, textAlign: 'center' }]}>QTY</Text>
+            <Text style={[styles.th, { flex: 1.3, textAlign: 'center' }]}>HARGA</Text>
+            <Text style={[styles.th, { flex: 1.5, textAlign: 'right', paddingRight: 10 }]}>TOTAL</Text>
+            <View style={{ width: 30 }} />
+          </View>
+          {rows.map((row) => (
+            <View key={row._id} style={[styles.tableRow, { zIndex: activeRowId === row._id ? 100 : 1 }]}>
+              <View style={{ flex: 2.6 }}>{renderSearchCell(row)}</View>
+              <Text style={[styles.mono, styles.cellText, { flex: 0.8 }]}>{row.item?.quantity ?? '-'}</Text>
+              {renderStepper(row, { flex: 1.8 })}
+              <TextInput style={[styles.mono, styles.cellInput, { flex: 1.3 }]} keyboardType="numeric" value={row.price} onChangeText={t => updateRow(row._id, 'price', t)} />
+              <Text style={[styles.mono, styles.cellTotal, { flex: 1.5 }]}>{formatRupiah(parseNum(row.total))}</Text>
+              <TouchableOpacity onPress={() => removeRow(row._id)} style={styles.removeBtn}>
+                <Ionicons name="trash-outline" size={18} color="#94A3B8" />
+              </TouchableOpacity>
+            </View>
+          ))}
+        </>
+      ) : (
+        rows.map((row) => (
+          <View key={row._id} style={[styles.mItemCard, { zIndex: activeRowId === row._id ? 100 : 1 }]}>
+            {renderSearchCell(row)}
+            <View style={styles.mItemControls}>
+              <View style={styles.mField}>
+                <Text style={styles.mFieldLabel}>QTY</Text>
+                {renderStepper(row)}
               </View>
-            )}
+              <View style={styles.mField}>
+                <Text style={styles.mFieldLabel}>HARGA SATUAN</Text>
+                <TextInput style={[styles.mono, styles.cellInput]} keyboardType="numeric" value={row.price} onChangeText={t => updateRow(row._id, 'price', t)} />
+              </View>
+              <TouchableOpacity onPress={() => removeRow(row._id)} style={styles.mTrash}>
+                <Ionicons name="trash-outline" size={20} color="#DC2626" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.mItemFooter}>
+              <Text style={styles.mStock}>Stok: {row.item?.quantity ?? '-'}{row.item?.allow_preorder ? ' • Pre-order' : ''}</Text>
+              <Text style={[styles.mono, styles.mTotal]}>{formatRupiah(parseNum(row.total))}</Text>
+            </View>
           </View>
-          <Text style={[styles.mono, styles.cellText, { flex: 0.8 }]}>{row.item?.quantity ?? '-'}</Text>
-          <View style={styles.qtyStepper}>
-            <TouchableOpacity style={styles.stepBtn} onPress={() => stepQty(row._id, -1)}>
-              <Ionicons name="remove" size={16} color="#0F172A" />
-            </TouchableOpacity>
-            <TextInput style={[styles.mono, styles.qtyInput]} keyboardType="numeric" value={row.qty} onChangeText={t => updateRow(row._id, 'qty', t)} />
-            <TouchableOpacity style={styles.stepBtn} onPress={() => stepQty(row._id, 1)}>
-              <Ionicons name="add" size={16} color="#0F172A" />
-            </TouchableOpacity>
-          </View>
-          <TextInput style={[styles.mono, styles.cellInput, { flex: 1.3 }]} keyboardType="numeric" value={row.price} onChangeText={t => updateRow(row._id, 'price', t)} />
-          <Text style={[styles.mono, styles.cellTotal, { flex: 1.5 }]}>{formatRupiah(parseNum(row.total))}</Text>
-          <TouchableOpacity onPress={() => removeRow(row._id)} style={styles.removeBtn}>
-            <Ionicons name="trash-outline" size={18} color="#94A3B8" />
-          </TouchableOpacity>
-        </View>
-      ))}
+        ))
+      )}
     </View>
   );
 
@@ -685,9 +720,18 @@ const styles = StyleSheet.create({
   cellText: { fontSize: 13, textAlign: 'center', color: '#0F172A' },
   cellTotal: { fontSize: 13, fontWeight: '700', color: '#0F172A', textAlign: 'right' },
   removeBtn: { width: 30, alignItems: 'center' },
-  qtyStepper: { flex: 1.8, flexDirection: 'row', alignItems: 'center' },
-  stepBtn: { width: 26, height: 32, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 6, justifyContent: 'center', alignItems: 'center' },
-  qtyInput: { flex: 1, backgroundColor: '#F8FAFC', borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#E2E8F0', paddingVertical: 8, fontSize: 13, textAlign: 'center', marginHorizontal: 2, color: '#0F172A' },
+  qtyStepper: { flexDirection: 'row', alignItems: 'center' },
+  stepBtn: { width: 30, height: 38, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 6, justifyContent: 'center', alignItems: 'center' },
+  qtyInput: { flex: 1, backgroundColor: '#F8FAFC', borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#E2E8F0', paddingVertical: 9, fontSize: 14, textAlign: 'center', marginHorizontal: 2, color: '#0F172A' },
+  // Mobile per-item card (stacked layout instead of a cramped table row)
+  mItemCard: { borderWidth: 1, borderColor: '#F1F5F9', borderRadius: 12, padding: 12, marginBottom: 10, backgroundColor: '#FFF' },
+  mItemControls: { flexDirection: 'row', alignItems: 'flex-end', gap: 10, marginTop: 12 },
+  mField: { flex: 1 },
+  mFieldLabel: { fontSize: 9, fontWeight: '800', color: '#94A3B8', marginBottom: 6, letterSpacing: 0.5 },
+  mTrash: { width: 42, height: 38, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FEF2F2', borderRadius: 8 },
+  mItemFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#F1F5F9' },
+  mStock: { fontSize: 12, color: '#64748B', fontWeight: '600' },
+  mTotal: { fontSize: 17, fontWeight: '900', color: '#DC2626' },
   suggestBox: { position: 'absolute', top: 42, left: 0, right: 0, backgroundColor: '#FFF', borderRadius: 8, elevation: 10, zIndex: 1000, borderWidth: 1, borderColor: '#E2E8F0' },
   suggestItem: { padding: 12, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
   receiptCard: { 

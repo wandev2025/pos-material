@@ -1,6 +1,6 @@
 import { Feather } from '@expo/vector-icons';
 import { useEffect, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useProfile } from '../../lib/ProfileContext';
 import { supabase } from '../../lib/supabase';
 
@@ -9,6 +9,8 @@ const formatRupiah = (n: number) =>
 
 export default function Dashboard() {
   const { profile } = useProfile();
+  const { width } = useWindowDimensions();
+  const isDesktop = width > 768;
   const [now, setNow] = useState(new Date());
   const [stats, setStats] = useState({ count: 0, cash: 0, digital: 0 });
 
@@ -48,7 +50,7 @@ export default function Dashboard() {
   );
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView style={styles.container} contentContainerStyle={isDesktop ? styles.content : styles.contentMobile}>
       <Text style={styles.welcome}>Selamat datang,</Text>
       <Text style={styles.name}>{profile?.full_name || 'Admin'}</Text>
       <Text style={styles.quote}>"Jadilah seperti petani, menanam dengan sungguh-sungguh, lalu menyerahkan hasil panen pada Tuhan."</Text>
@@ -91,6 +93,7 @@ function StatItem({ label, value, unit, isRed }: any) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F9FAFB' },
   content: { padding: 40 },
+  contentMobile: { paddingHorizontal: 14, paddingTop: 20, paddingBottom: 28 },
   welcome: { fontSize: 16, color: '#6B7280' },
   name: { fontSize: 36, fontWeight: '900', color: '#111827', marginBottom: 10 },
   quote: { fontStyle: 'italic', color: '#9CA3AF', textAlign: 'center', marginBottom: 40 },

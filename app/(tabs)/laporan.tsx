@@ -3,7 +3,7 @@ import * as Print from 'expo-print';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator, Platform, ScrollView,
-  StyleSheet, Text, TouchableOpacity, View
+  StyleSheet, Text, TouchableOpacity, useWindowDimensions, View
 } from 'react-native';
 import { useProfile } from '../../lib/ProfileContext';
 import { supabase } from '../../lib/supabase';
@@ -46,6 +46,8 @@ function rangeFor(preset: Preset) {
 
 export default function LaporanScreen() {
   const { profile } = useProfile();
+  const { width } = useWindowDimensions();
+  const isDesktop = width > 768;
   const isManager = profile?.role === 'SUPERADMIN' || profile?.role === 'OWNER';
 
   const [preset, setPreset] = useState<Preset>('30d');
@@ -182,7 +184,7 @@ export default function LaporanScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ padding: 20, paddingBottom: 60 }}>
+    <ScrollView style={styles.container} contentContainerStyle={{ paddingHorizontal: isDesktop ? 20 : 14, paddingTop: 16, paddingBottom: 60 }}>
       <View style={styles.headerRow}>
         <Text style={styles.title}>Laporan</Text>
         <TouchableOpacity style={styles.printBtn} onPress={printReport}>
