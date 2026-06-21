@@ -12,11 +12,7 @@ import type { DocConfig, PrintJob, Transport } from '../types';
 const PRINTER_CLASS = 0x07; // USB base class for printers
 
 function usbAvailable(): boolean {
-  return (
-    Platform.OS === 'web' &&
-    typeof navigator !== 'undefined' &&
-    !!(navigator as any).usb
-  );
+  return Platform.OS === 'web' && typeof navigator !== 'undefined' && !!(navigator as any).usb;
 }
 
 // A stored id is either the device serial number (preferred) or "vendor:product"
@@ -30,28 +26,19 @@ async function findPairedDevice(): Promise<any | null> {
   const stored = await getPairedDevice('WEBUSB');
   if (!stored) return null;
   const devices: any[] = await (navigator as any).usb.getDevices();
-  return (Array.isArray(devices) ? devices : []).find((d) =>
-    deviceMatches(d, stored)
-  ) ?? null;
+  return (Array.isArray(devices) ? devices : []).find(d => deviceMatches(d, stored)) ?? null;
 }
 
 // Open the device and locate a bulk OUT endpoint on a printer-class interface
 // (falling back to the first interface that exposes one).
-async function openForWrite(
-  device: any
-): Promise<{ interfaceNumber: number; endpoint: number }> {
+async function openForWrite(device: any): Promise<{ interfaceNumber: number; endpoint: number }> {
   await device.open();
   if (!device.configuration) await device.selectConfiguration(1);
 
   const interfaces: any[] = device.configuration?.interfaces ?? [];
-  const candidates = [
-    ...interfaces.filter((i) => i.alternate?.interfaceClass === PRINTER_CLASS),
-    ...interfaces,
-  ];
+  const candidates = [...interfaces.filter(i => i.alternate?.interfaceClass === PRINTER_CLASS), ...interfaces];
   for (const iface of candidates) {
-    const ep = (iface.alternate?.endpoints ?? []).find(
-      (e: any) => e.direction === 'out' && e.type === 'bulk'
-    );
+    const ep = (iface.alternate?.endpoints ?? []).find((e: any) => e.direction === 'out' && e.type === 'bulk');
     if (ep) {
       await device.claimInterface(iface.interfaceNumber);
       return { interfaceNumber: iface.interfaceNumber, endpoint: ep.endpointNumber };

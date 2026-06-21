@@ -3,11 +3,10 @@
 // THERMAL jobs are sent as base64 raw ESC/POS bytes; FAKTUR/DO jobs are sent
 // as HTML for the agent to render to a full-page printer.
 
-import { AGENT_URL } from '../types';
 import type { DocConfig, PrintJob, Transport } from '../types';
+import { AGENT_URL } from '../types';
 
-const B64 =
-  'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 
 // Pure-JS base64 so this works in both web and native runtimes (Hermes has no
 // global btoa).
@@ -16,11 +15,7 @@ function base64FromBytes(bytes: Uint8Array): string {
   let i = 0;
   for (; i + 2 < bytes.length; i += 3) {
     const n = (bytes[i] << 16) | (bytes[i + 1] << 8) | bytes[i + 2];
-    out +=
-      B64[(n >> 18) & 63] +
-      B64[(n >> 12) & 63] +
-      B64[(n >> 6) & 63] +
-      B64[n & 63];
+    out += B64[(n >> 18) & 63] + B64[(n >> 12) & 63] + B64[(n >> 6) & 63] + B64[n & 63];
   }
   const rem = bytes.length - i;
   if (rem === 1) {
@@ -59,11 +54,7 @@ export async function listAgentPrinters(): Promise<{ name: string }[]> {
     const res = await fetch(AGENT_URL + '/list', { signal: ctrl.signal });
     if (!res.ok) return [];
     const data: any = await res.json();
-    const arr = Array.isArray(data)
-      ? data
-      : Array.isArray(data?.printers)
-        ? data.printers
-        : [];
+    const arr = Array.isArray(data) ? data : Array.isArray(data?.printers) ? data.printers : [];
     return arr
       .map((p: any) => (typeof p === 'string' ? { name: p } : { name: String(p?.name ?? '') }))
       .filter((p: { name: string }) => p.name.length > 0);

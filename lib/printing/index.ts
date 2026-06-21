@@ -10,16 +10,8 @@ import { dialogTransport } from './transports/dialog';
 import { kioskTransport } from './transports/kiosk';
 import { webserialTransport } from './transports/webserial';
 import { webusbTransport } from './transports/webusb';
+import type { DocType, PrintConfig, SaleItemLike, SaleLike, ShopSettings, Transport, TransportId } from './types';
 import { FALLBACK_CHAINS } from './types';
-import type {
-  DocType,
-  PrintConfig,
-  SaleItemLike,
-  SaleLike,
-  ShopSettings,
-  Transport,
-  TransportId,
-} from './types';
 
 export const TRANSPORTS: Record<TransportId, Transport> = {
   WEBUSB: webusbTransport,
@@ -50,11 +42,8 @@ export async function printDocument(args: {
   // Only build ESC/POS bytes when a raw transport is actually in play. This
   // avoids loading the encoder for HTML-only paths (DIALOG/KIOSK).
   const needsEscpos =
-    docType === 'THERMAL' &&
-    order.some((id) => id === 'WEBUSB' || id === 'WEBSERIAL' || id === 'AGENT');
-  const escpos = needsEscpos
-    ? await buildThermalEscPos(settings, sale, items, cfg.paper || '80mm')
-    : null;
+    docType === 'THERMAL' && order.some(id => id === 'WEBUSB' || id === 'WEBSERIAL' || id === 'AGENT');
+  const escpos = needsEscpos ? await buildThermalEscPos(settings, sale, items, cfg.paper || '80mm') : null;
 
   const tried: TransportId[] = [];
 
@@ -82,15 +71,15 @@ export async function printDocument(args: {
   return { ok: false, via: null, tried };
 }
 
-// Convenience re-exports for the public surface (types, encoder, pairing,
-// agent discovery) so callers only import from 'lib/printing'.
-export * from './types';
-export { buildThermalEscPos } from './escpos';
-export { listAgentPrinters, pingAgent } from './transports/agent';
-export { pairWebUsb } from './transports/webusb';
-export { pairWebSerial } from './transports/webserial';
 // Exposed for print previews — exactly the HTML that DIALOG/KIOSK/AGENT print.
 export { generatePrintHtml } from '../printTemplates';
+export { buildThermalEscPos } from './escpos';
+export { listAgentPrinters, pingAgent } from './transports/agent';
 // Robust hidden-iframe printer (reused by screens that print custom HTML, e.g.
 // the customer statement) — never popup-blocked, silent under --kiosk-printing.
 export { printHtmlViaIframe } from './transports/iframePrint';
+export { pairWebSerial } from './transports/webserial';
+export { pairWebUsb } from './transports/webusb';
+// Convenience re-exports for the public surface (types, encoder, pairing,
+// agent discovery) so callers only import from 'lib/printing'.
+export * from './types';

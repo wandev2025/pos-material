@@ -67,7 +67,9 @@ export default function RootLayout() {
       }
     `;
     document.head.appendChild(style);
-    return () => { document.head.removeChild(style); };
+    return () => {
+      document.head.removeChild(style);
+    };
   }, []);
 
   return (

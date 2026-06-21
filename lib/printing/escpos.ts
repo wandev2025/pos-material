@@ -4,8 +4,8 @@
 // not be installed, so it is imported lazily and any failure resolves to `null`
 // (callers then fall back to an HTML transport).
 
-import { PAPER_COLUMNS } from './types';
 import type { PaperProfile, SaleItemLike, SaleLike, ShopSettings } from './types';
+import { PAPER_COLUMNS } from './types';
 
 const formatRupiah = (n: number) =>
   new Intl.NumberFormat('id-ID', {
@@ -53,7 +53,10 @@ export async function buildThermalEscPos(
       chain = chain.font('B').line(settings.shop_address).font('A');
     }
     if (settings.shop_phone) {
-      chain = chain.font('B').line('Telp: ' + settings.shop_phone).font('A');
+      chain = chain
+        .font('B')
+        .line('Telp: ' + settings.shop_phone)
+        .font('A');
     }
 
     const columnsDef = [
@@ -66,27 +69,18 @@ export async function buildThermalEscPos(
       .rule({ style: 'single' })
       .table(
         columnsDef,
-        items.map((i) => [
-          `${i.quantity}x ${i.item_name}`,
-          formatRupiah(i.price_at_sale * i.quantity),
-        ])
+        items.map(i => [`${i.quantity}x ${i.item_name}`, formatRupiah(i.price_at_sale * i.quantity)])
       )
       .rule({ style: 'single' })
       .table(columnsDef, [
         [
           (enc: any) => enc.bold(true).text('TOTAL').bold(false),
-          (enc: any) =>
-            enc.bold(true).text(formatRupiah(sale.total_amount)).bold(false),
+          (enc: any) => enc.bold(true).text(formatRupiah(sale.total_amount)).bold(false),
         ],
       ]);
 
     if (settings.thermal_footer) {
-      chain = chain
-        .newline()
-        .align('center')
-        .italic(true)
-        .line(settings.thermal_footer)
-        .italic(false);
+      chain = chain.newline().align('center').italic(true).line(settings.thermal_footer).italic(false);
     }
 
     return chain.newline(2).cut().encode() as Uint8Array;

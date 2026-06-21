@@ -43,9 +43,18 @@ export const InvoicePreview = ({ settings }: { settings: PrintSettings }) => (
       <View style={{ flex: 1, alignItems: 'flex-end' }}>
         <Text style={[styles.docType, { color: '#1E40AF' }]}>FAKTUR</Text>
         <View style={styles.metaBox}>
-          <View style={styles.metaRow}><Text style={styles.metaL}>No. Faktur</Text><Text style={styles.metaV}>: INV24001</Text></View>
-          <View style={styles.metaRow}><Text style={styles.metaL}>Tanggal</Text><Text style={styles.metaV}>: 20/05/2024</Text></View>
-          <View style={styles.metaRow}><Text style={styles.metaL}>Kepada</Text><Text style={styles.metaV}>: Toko Sejahtera</Text></View>
+          <View style={styles.metaRow}>
+            <Text style={styles.metaL}>No. Faktur</Text>
+            <Text style={styles.metaV}>: INV24001</Text>
+          </View>
+          <View style={styles.metaRow}>
+            <Text style={styles.metaL}>Tanggal</Text>
+            <Text style={styles.metaV}>: 20/05/2024</Text>
+          </View>
+          <View style={styles.metaRow}>
+            <Text style={styles.metaL}>Kepada</Text>
+            <Text style={styles.metaV}>: Toko Sejahtera</Text>
+          </View>
         </View>
       </View>
     </View>
@@ -66,10 +75,18 @@ export const InvoicePreview = ({ settings }: { settings: PrintSettings }) => (
       </View>
     </View>
     <View style={styles.docBottomSection}>
-      <View style={{ flex: 1.5 }}><Text style={styles.docFooterNote}>Ket: {settings.invoice_footer}</Text></View>
+      <View style={{ flex: 1.5 }}>
+        <Text style={styles.docFooterNote}>Ket: {settings.invoice_footer}</Text>
+      </View>
       <View style={{ flex: 1, alignItems: 'flex-end' }}>
-        <View style={styles.summaryRow}><Text style={styles.sumL}>Total</Text><Text style={styles.sumV}>725.000</Text></View>
-        <View style={styles.summaryRow}><Text style={styles.sumL}>Bayar</Text><Text style={styles.sumV}>725.000</Text></View>
+        <View style={styles.summaryRow}>
+          <Text style={styles.sumL}>Total</Text>
+          <Text style={styles.sumV}>725.000</Text>
+        </View>
+        <View style={styles.summaryRow}>
+          <Text style={styles.sumL}>Bayar</Text>
+          <Text style={styles.sumV}>725.000</Text>
+        </View>
       </View>
     </View>
     <View style={styles.signatureRow}>
@@ -128,15 +145,38 @@ const SignArea = ({ title }: { title: string }) => (
 );
 
 const styles = StyleSheet.create({
-  thermalPaper: { width: 300, backgroundColor: '#FFF', padding: 20, shadowColor: '#000', shadowOpacity: 0.1, elevation: 5 },
+  thermalPaper: {
+    width: 300,
+    backgroundColor: '#FFF',
+    padding: 20,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    elevation: 5,
+  },
   thermalBrand: { textAlign: 'center', fontSize: 18, fontWeight: '900', color: '#000' },
   thermalAddress: { textAlign: 'center', fontSize: 11, color: '#333' },
   thermalDash: { textAlign: 'center', marginVertical: 10, letterSpacing: 1 },
   thermalRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
   thermalTxt: { fontSize: 12, color: '#000' },
   thermalFooter: { textAlign: 'center', fontSize: 11, fontStyle: 'italic' },
-  dotMatrixPaper: { width: 750, minHeight: 450, backgroundColor: '#FFF', padding: 40, borderWidth: 1, borderColor: '#CBD5E1', shadowColor: '#000', shadowOpacity: 0.1, elevation: 5 },
-  docHeader: { flexDirection: 'row', borderBottomWidth: 2, borderBottomColor: '#1E293B', paddingBottom: 20, marginBottom: 20 },
+  dotMatrixPaper: {
+    width: 750,
+    minHeight: 450,
+    backgroundColor: '#FFF',
+    padding: 40,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    elevation: 5,
+  },
+  docHeader: {
+    flexDirection: 'row',
+    borderBottomWidth: 2,
+    borderBottomColor: '#1E293B',
+    paddingBottom: 20,
+    marginBottom: 20,
+  },
   docBrand: { fontSize: 22, fontWeight: '900', color: '#1E293B' },
   docAddress: { fontSize: 12, color: '#475569', marginTop: 2 },
   docType: { fontSize: 28, fontWeight: '900', letterSpacing: 2 },
@@ -156,5 +196,5 @@ const styles = StyleSheet.create({
   signatureRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 40 },
   signArea: { width: 150, alignItems: 'center' },
   signTitle: { fontSize: 12, fontWeight: '700', marginBottom: 50 },
-  signLine: { width: '100%', height: 1, backgroundColor: '#000' }
+  signLine: { width: '100%', height: 1, backgroundColor: '#000' },
 });

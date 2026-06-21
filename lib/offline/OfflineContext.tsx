@@ -2,7 +2,8 @@
 // Resilient offline safeguard: detect connectivity so screens can disable
 // writes while still rendering cached reads. Web uses navigator.onLine and the
 // window online/offline events; native (no navigator) defaults to online.
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import type React from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 
 const OnlineContext = createContext<boolean>(true);
 

@@ -11,7 +11,7 @@ import {
   TextInput,
   TouchableOpacity,
   useWindowDimensions,
-  View
+  View,
 } from 'react-native';
 import { formatRupiah } from '../../lib/format';
 import { parseNum } from '../../lib/number';
@@ -21,7 +21,13 @@ import { supabase } from '../../lib/supabase';
 import { toast } from '../../lib/toast';
 
 const fmtDate = (iso: string) =>
-  new Date(iso).toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  new Date(iso).toLocaleString('id-ID', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 
 // A sale is "credit" (settle via piutang) when it isn't fully paid or was a tempo sale.
 const isCreditSale = (s: { status: string; payment_method?: string }) =>
@@ -92,11 +98,15 @@ export default function ReturScreen() {
       ]);
       if (salesData) setSales(salesData as SaleRow[]);
       if (returnsData) setReturns(returnsData as ReturnRow[]);
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+    }
     setLoading(false);
   };
 
-  useEffect(() => { if (isManager) fetchData(); }, [isManager]);
+  useEffect(() => {
+    if (isManager) fetchData();
+  }, [isManager]);
 
   // --- OPEN RETURN MODAL: load the sale's items ---
   const handleOpenReturn = async (sale: SaleRow) => {
@@ -176,13 +186,15 @@ export default function ReturScreen() {
   const filteredSales = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return sales;
-    return sales.filter(s =>
-      String(s.id).includes(q) || (s.customer_name || '').toLowerCase().includes(q)
-    );
+    return sales.filter(s => String(s.id).includes(q) || (s.customer_name || '').toLowerCase().includes(q));
   }, [sales, search]);
 
   if (!isManager) {
-    return <View style={styles.center}><Text style={styles.denied}>Akses Owner Diperlukan</Text></View>;
+    return (
+      <View style={styles.center}>
+        <Text style={styles.denied}>Akses Owner Diperlukan</Text>
+      </View>
+    );
   }
 
   return (
@@ -203,43 +215,44 @@ export default function ReturScreen() {
         </TouchableOpacity>
       </View>
 
-      {loading ? <ActivityIndicator style={{ marginTop: 50 }} color="#DC2626" /> : (
-        <ScrollView
-          contentContainerStyle={{ padding: isDesktop ? 30 : 14, paddingBottom: 60 }}
-        >
+      {loading ? (
+        <ActivityIndicator style={{ marginTop: 50 }} color="#DC2626" />
+      ) : (
+        <ScrollView contentContainerStyle={{ padding: isDesktop ? 30 : 14, paddingBottom: 60 }}>
           <View style={[isDesktop && styles.columns]}>
             {/* PICK A SALE TO RETURN */}
             <View style={[styles.card, isDesktop && styles.colCard]}>
               <Text style={styles.cardTitle}>PILIH NOTA UNTUK RETUR</Text>
               {filteredSales.length === 0 ? (
                 <Text style={styles.empty}>Tidak ada nota ditemukan.</Text>
-              ) : filteredSales.map(s => {
-                const returned = s.amount_returned || 0;
-                const isCredit = isCreditSale(s);
-                return (
-                  <TouchableOpacity key={s.id} style={styles.saleRow} onPress={() => handleOpenReturn(s)}>
-                    <View style={[styles.iconCircle, isCredit && { backgroundColor: '#FEF3C7' }]}>
-                      <Feather name="rotate-ccw" size={18} color={isCredit ? '#B45309' : '#64748B'} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.saleName}>{s.customer_name || 'Tanpa Nama'}</Text>
-                      <Text style={styles.saleSub}>#{s.id} • {fmtDate(s.created_at)}</Text>
-                      <View style={styles.badgeRow}>
-                        <Text style={[styles.tag,
-                          isCredit ? styles.tagCredit : styles.tagCash]}>
-                          {isCredit ? 'KREDIT/TEMPO' : 'TUNAI'}
-                        </Text>
-                        {returned > 0 && (
-                          <Text style={[styles.tag, styles.tagReturned]}>
-                            DIRETUR {formatRupiah(returned)}
-                          </Text>
-                        )}
+              ) : (
+                filteredSales.map(s => {
+                  const returned = s.amount_returned || 0;
+                  const isCredit = isCreditSale(s);
+                  return (
+                    <TouchableOpacity key={s.id} style={styles.saleRow} onPress={() => handleOpenReturn(s)}>
+                      <View style={[styles.iconCircle, isCredit && { backgroundColor: '#FEF3C7' }]}>
+                        <Feather name="rotate-ccw" size={18} color={isCredit ? '#B45309' : '#64748B'} />
                       </View>
-                    </View>
-                    <Text style={styles.salePrice}>{formatRupiah(s.total_amount)}</Text>
-                  </TouchableOpacity>
-                );
-              })}
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.saleName}>{s.customer_name || 'Tanpa Nama'}</Text>
+                        <Text style={styles.saleSub}>
+                          #{s.id} • {fmtDate(s.created_at)}
+                        </Text>
+                        <View style={styles.badgeRow}>
+                          <Text style={[styles.tag, isCredit ? styles.tagCredit : styles.tagCash]}>
+                            {isCredit ? 'KREDIT/TEMPO' : 'TUNAI'}
+                          </Text>
+                          {returned > 0 && (
+                            <Text style={[styles.tag, styles.tagReturned]}>DIRETUR {formatRupiah(returned)}</Text>
+                          )}
+                        </View>
+                      </View>
+                      <Text style={styles.salePrice}>{formatRupiah(s.total_amount)}</Text>
+                    </TouchableOpacity>
+                  );
+                })
+              )}
             </View>
 
             {/* RECENT RETURNS */}
@@ -247,22 +260,32 @@ export default function ReturScreen() {
               <Text style={styles.cardTitle}>RETUR TERAKHIR</Text>
               {returns.length === 0 ? (
                 <Text style={styles.empty}>Belum ada retur.</Text>
-              ) : returns.map(r => {
-                const isCash = r.refund_method === 'CASH';
-                return (
-                  <View key={r.id} style={styles.returnRow}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.saleName}>Nota #{r.sale_id}</Text>
-                      <Text style={styles.saleSub}>{fmtDate(r.created_at)} • {r.employee_name || '—'}</Text>
-                      {!!r.note && <Text style={styles.noteText}>{r.note}</Text>}
-                      <Text style={[styles.tag, isCash ? styles.tagCash : styles.tagCredit, { alignSelf: 'flex-start', marginTop: 6 }]}>
-                        {isCash ? 'REFUND TUNAI' : 'POTONG PIUTANG'}
-                      </Text>
+              ) : (
+                returns.map(r => {
+                  const isCash = r.refund_method === 'CASH';
+                  return (
+                    <View key={r.id} style={styles.returnRow}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.saleName}>Nota #{r.sale_id}</Text>
+                        <Text style={styles.saleSub}>
+                          {fmtDate(r.created_at)} • {r.employee_name || '—'}
+                        </Text>
+                        {!!r.note && <Text style={styles.noteText}>{r.note}</Text>}
+                        <Text
+                          style={[
+                            styles.tag,
+                            isCash ? styles.tagCash : styles.tagCredit,
+                            { alignSelf: 'flex-start', marginTop: 6 },
+                          ]}
+                        >
+                          {isCash ? 'REFUND TUNAI' : 'POTONG PIUTANG'}
+                        </Text>
+                      </View>
+                      <Text style={[styles.salePrice, { color: '#DC2626' }]}>-{formatRupiah(r.refund_amount)}</Text>
                     </View>
-                    <Text style={[styles.salePrice, { color: '#DC2626' }]}>-{formatRupiah(r.refund_amount)}</Text>
-                  </View>
-                );
-              })}
+                  );
+                })
+              )}
             </View>
           </View>
         </ScrollView>
@@ -271,45 +294,64 @@ export default function ReturScreen() {
       {/* MODAL: PROCESS RETURN */}
       <Modal visible={modalVisible} transparent animationType="fade">
         <View style={[styles.modalOverlay, !isDesktop && styles.modalOverlayMobile]}>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.modalContent, isDesktop && { width: 620 }]}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={[styles.modalContent, isDesktop && { width: 620 }]}
+          >
             <View style={styles.modalHeader}>
               <View>
                 <Text style={styles.modalTitle}>Proses Retur</Text>
                 {selectedSale && (
-                  <Text style={styles.modalSub}>Nota #{selectedSale.id} • {selectedSale.customer_name || 'Tanpa Nama'}</Text>
+                  <Text style={styles.modalSub}>
+                    Nota #{selectedSale.id} • {selectedSale.customer_name || 'Tanpa Nama'}
+                  </Text>
                 )}
               </View>
-              <TouchableOpacity onPress={() => setModalVisible(false)}><Feather name="x" size={24} /></TouchableOpacity>
+              <TouchableOpacity onPress={() => setModalVisible(false)}>
+                <Feather name="x" size={24} />
+              </TouchableOpacity>
             </View>
 
-            {loadingItems ? <ActivityIndicator color="#DC2626" style={{ marginVertical: 30 }} /> : (
+            {loadingItems ? (
+              <ActivityIndicator color="#DC2626" style={{ marginVertical: 30 }} />
+            ) : (
               <ScrollView showsVerticalScrollIndicator={false}>
                 <Text style={styles.label}>Pilih Barang & Jumlah Retur</Text>
                 {lines.length === 0 ? (
                   <Text style={styles.empty}>Nota ini tidak memiliki barang.</Text>
-                ) : lines.map((l, idx) => (
-                  <View key={l.id} style={styles.lineCard}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.lineName}>{l.item_name}</Text>
-                      <Text style={styles.lineSub}>Terjual {l.quantity} • {formatRupiah(l.price_at_sale)}</Text>
+                ) : (
+                  lines.map((l, idx) => (
+                    <View key={l.id} style={styles.lineCard}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.lineName}>{l.item_name}</Text>
+                        <Text style={styles.lineSub}>
+                          Terjual {l.quantity} • {formatRupiah(l.price_at_sale)}
+                        </Text>
+                      </View>
+                      <View style={styles.qtyRow}>
+                        <TouchableOpacity
+                          style={styles.stepBtn}
+                          onPress={() => setLineQty(idx, String(parseNum(l.returnQty) - 1))}
+                        >
+                          <Feather name="minus" size={16} color="#DC2626" />
+                        </TouchableOpacity>
+                        <TextInput
+                          style={styles.qtyInput}
+                          placeholder="0"
+                          keyboardType="numeric"
+                          value={l.returnQty}
+                          onChangeText={v => setLineQty(idx, v)}
+                        />
+                        <TouchableOpacity
+                          style={styles.stepBtn}
+                          onPress={() => setLineQty(idx, String(parseNum(l.returnQty) + 1))}
+                        >
+                          <Feather name="plus" size={16} color="#16A34A" />
+                        </TouchableOpacity>
+                      </View>
                     </View>
-                    <View style={styles.qtyRow}>
-                      <TouchableOpacity style={styles.stepBtn} onPress={() => setLineQty(idx, String(parseNum(l.returnQty) - 1))}>
-                        <Feather name="minus" size={16} color="#DC2626" />
-                      </TouchableOpacity>
-                      <TextInput
-                        style={styles.qtyInput}
-                        placeholder="0"
-                        keyboardType="numeric"
-                        value={l.returnQty}
-                        onChangeText={(v) => setLineQty(idx, v)}
-                      />
-                      <TouchableOpacity style={styles.stepBtn} onPress={() => setLineQty(idx, String(parseNum(l.returnQty) + 1))}>
-                        <Feather name="plus" size={16} color="#16A34A" />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                ))}
+                  ))
+                )}
 
                 <Text style={[styles.label, { marginTop: 8 }]}>Catatan (opsional)</Text>
                 <TextInput
@@ -336,9 +378,11 @@ export default function ReturScreen() {
                   onPress={handleSubmit}
                   disabled={!online || submitting || refundTotal <= 0}
                 >
-                  {submitting
-                    ? <ActivityIndicator color="#FFF" />
-                    : <Text style={styles.btnText}>PROSES RETUR & RESTOK</Text>}
+                  {submitting ? (
+                    <ActivityIndicator color="#FFF" />
+                  ) : (
+                    <Text style={styles.btnText}>PROSES RETUR & RESTOK</Text>
+                  )}
                 </TouchableOpacity>
                 {!online && <Text style={styles.offlineHint}>Tidak dapat menyimpan saat offline.</Text>}
               </ScrollView>
@@ -355,32 +399,95 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   denied: { color: '#94A3B8', fontWeight: '700' },
 
-  header: { padding: 20, backgroundColor: '#FFF', flexDirection: 'row', gap: 10, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
-  searchBar: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#F3F4F6', borderRadius: 12, paddingHorizontal: 15, height: 45 },
+  header: {
+    padding: 20,
+    backgroundColor: '#FFF',
+    flexDirection: 'row',
+    gap: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  searchBar: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 12,
+    paddingHorizontal: 15,
+    height: 45,
+  },
   searchInput: { flex: 1, marginLeft: 10, fontSize: 14, outlineStyle: 'none' } as any,
-  refreshBtn: { width: 45, height: 45, backgroundColor: '#64748B', borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  refreshBtn: {
+    width: 45,
+    height: 45,
+    backgroundColor: '#64748B',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
 
   columns: { flexDirection: 'row', gap: 20, alignItems: 'flex-start' },
   colCard: { flex: 1 },
-  card: { backgroundColor: '#FFF', borderRadius: 16, padding: 18, marginBottom: 16, borderWidth: 1, borderColor: '#F1F5F9' },
+  card: {
+    backgroundColor: '#FFF',
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
   cardTitle: { fontSize: 11, fontWeight: '900', color: '#94A3B8', letterSpacing: 1, marginBottom: 12 },
   empty: { color: '#94A3B8', fontStyle: 'italic', paddingVertical: 8 },
 
-  saleRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F8FAFC', gap: 12 },
-  iconCircle: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#F9FAFB', justifyContent: 'center', alignItems: 'center' },
+  saleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F8FAFC',
+    gap: 12,
+  },
+  iconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#F9FAFB',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   saleName: { fontSize: 14, fontWeight: '700', color: '#1F2937' },
   saleSub: { fontSize: 11, color: '#94A3B8', marginTop: 2 },
   salePrice: { fontSize: 14, fontWeight: '800', color: '#0F172A' },
   badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
-  tag: { fontSize: 9, fontWeight: '900', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, overflow: 'hidden' },
+  tag: {
+    fontSize: 9,
+    fontWeight: '900',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
   tagCash: { color: '#166534', backgroundColor: '#F0FDF4' },
   tagCredit: { color: '#B45309', backgroundColor: '#FEF3C7' },
   tagReturned: { color: '#DC2626', backgroundColor: '#FEF2F2' },
 
-  returnRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F8FAFC', gap: 10 },
+  returnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F8FAFC',
+    gap: 10,
+  },
   noteText: { fontSize: 11, color: '#64748B', marginTop: 2, fontStyle: 'italic' },
 
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
   modalOverlayMobile: { padding: 0 },
   modalContent: { backgroundColor: '#FFF', borderRadius: 28, padding: 30, width: '100%', maxHeight: '95%' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
@@ -388,21 +495,66 @@ const styles = StyleSheet.create({
   modalSub: { fontSize: 12, color: '#64748B', marginTop: 4, fontWeight: '600' },
 
   label: { fontSize: 11, fontWeight: '800', color: '#94A3B8', marginBottom: 8, textTransform: 'uppercase' },
-  input: { backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, padding: 12, fontSize: 15, color: '#111827', marginBottom: 15 },
+  input: {
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 15,
+    color: '#111827',
+    marginBottom: 15,
+  },
 
-  lineCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 14, padding: 12, marginBottom: 10, gap: 10 },
+  lineCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 10,
+    gap: 10,
+  },
   lineName: { fontSize: 14, fontWeight: '700', color: '#1F2937' },
   lineSub: { fontSize: 11, color: '#94A3B8', marginTop: 2 },
   qtyRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  stepBtn: { width: 38, height: 38, borderRadius: 10, backgroundColor: '#FFF', borderWidth: 1, borderColor: '#E5E7EB', justifyContent: 'center', alignItems: 'center' },
-  qtyInput: { width: 54, backgroundColor: '#FFF', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, paddingVertical: 8, fontSize: 16, textAlign: 'center', color: '#111827', fontWeight: '800' },
+  stepBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: '#FFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  qtyInput: {
+    width: 54,
+    backgroundColor: '#FFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    paddingVertical: 8,
+    fontSize: 16,
+    textAlign: 'center',
+    color: '#111827',
+    fontWeight: '800',
+  },
 
   refundBox: { backgroundColor: '#0F172A', borderRadius: 16, padding: 16, marginTop: 6, marginBottom: 18 },
   refundLabel: { fontSize: 9, fontWeight: '800', color: '#94A3B8', marginBottom: 6 },
   refundVal: { fontSize: 26, fontWeight: '900', color: '#FFF' },
   refundHint: { fontSize: 11, color: 'rgba(255,255,255,0.6)', marginTop: 6, fontWeight: '600' },
 
-  primaryBtn: { backgroundColor: '#DC2626', padding: 16, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  primaryBtn: {
+    backgroundColor: '#DC2626',
+    padding: 16,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   btnDisabled: { backgroundColor: '#CBD5E1' },
   btnText: { color: '#FFF', fontWeight: '900', fontSize: 14, letterSpacing: 0.5 },
   offlineHint: { color: '#DC2626', fontSize: 12, fontWeight: '600', textAlign: 'center', marginTop: 10 },

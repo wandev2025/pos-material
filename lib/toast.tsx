@@ -9,17 +9,22 @@ import { Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from
 import Animated, { FadeInDown, FadeOutUp } from 'react-native-reanimated';
 
 export type ToastType = 'success' | 'error' | 'info';
-export interface ToastItem { id: number; type: ToastType; message: string; description?: string; }
+export interface ToastItem {
+  id: number;
+  type: ToastType;
+  message: string;
+  description?: string;
+}
 
 type Listener = (toasts: ToastItem[]) => void;
 let items: ToastItem[] = [];
 const listeners = new Set<Listener>();
 let counter = 0;
 
-const emit = () => listeners.forEach((l) => l([...items]));
+const emit = () => listeners.forEach(l => l([...items]));
 
 const dismiss = (id: number) => {
-  items = items.filter((t) => t.id !== id);
+  items = items.filter(t => t.id !== id);
   emit();
 };
 
@@ -32,15 +37,12 @@ const push = (type: ToastType, message: string, description?: string) => {
 };
 
 // Callable like sonner: toast('msg') plus toast.success/error/info(msg, description?).
-export const toast = Object.assign(
-  (message: string, description?: string) => push('info', message, description),
-  {
-    success: (m: string, d?: string) => push('success', m, d),
-    error: (m: string, d?: string) => push('error', m, d),
-    info: (m: string, d?: string) => push('info', m, d),
-    dismiss,
-  }
-);
+export const toast = Object.assign((message: string, description?: string) => push('info', message, description), {
+  success: (m: string, d?: string) => push('success', m, d),
+  error: (m: string, d?: string) => push('error', m, d),
+  info: (m: string, d?: string) => push('info', m, d),
+  dismiss,
+});
 
 const THEME: Record<ToastType, { icon: any; color: string; bg: string }> = {
   success: { icon: 'check-circle', color: '#16A34A', bg: '#F0FDF4' },
@@ -54,7 +56,9 @@ export function Toaster() {
   const isWide = width >= 768; // desktop → bottom-center, mobile → top-center
   useEffect(() => {
     listeners.add(setList);
-    return () => { listeners.delete(setList); };
+    return () => {
+      listeners.delete(setList);
+    };
   }, []);
 
   if (list.length === 0) return null;
@@ -64,15 +68,29 @@ export function Toaster() {
       style={[styles.wrap, Platform.OS === 'web' ? ({ position: 'fixed' } as any) : null, posStyle]}
       pointerEvents="box-none"
     >
-      {list.map((t) => {
+      {list.map(t => {
         const th = THEME[t.type];
         return (
-          <Animated.View key={t.id} entering={FadeInDown.duration(220)} exiting={FadeOutUp.duration(180)} style={{ width: '100%', maxWidth: 440, alignItems: 'stretch' }}>
-            <Pressable onPress={() => dismiss(t.id)} style={[styles.toast, { backgroundColor: th.bg, borderColor: th.color }]}>
+          <Animated.View
+            key={t.id}
+            entering={FadeInDown.duration(220)}
+            exiting={FadeOutUp.duration(180)}
+            style={{ width: '100%', maxWidth: 440, alignItems: 'stretch' }}
+          >
+            <Pressable
+              onPress={() => dismiss(t.id)}
+              style={[styles.toast, { backgroundColor: th.bg, borderColor: th.color }]}
+            >
               <Feather name={th.icon} size={18} color={th.color} />
               <View style={{ flex: 1 }}>
-                <Text style={[styles.msg, { color: th.color }]} numberOfLines={3}>{t.message}</Text>
-                {!!t.description && <Text style={styles.desc} numberOfLines={4}>{t.description}</Text>}
+                <Text style={[styles.msg, { color: th.color }]} numberOfLines={3}>
+                  {t.message}
+                </Text>
+                {!!t.description && (
+                  <Text style={styles.desc} numberOfLines={4}>
+                    {t.description}
+                  </Text>
+                )}
               </View>
             </Pressable>
           </Animated.View>

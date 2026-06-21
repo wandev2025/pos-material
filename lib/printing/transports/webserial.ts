@@ -13,11 +13,7 @@ import type { DocConfig, PrintJob, Transport } from '../types';
 const BAUD_RATE = 9600;
 
 function serialAvailable(): boolean {
-  return (
-    Platform.OS === 'web' &&
-    typeof navigator !== 'undefined' &&
-    !!(navigator as any).serial
-  );
+  return Platform.OS === 'web' && typeof navigator !== 'undefined' && !!(navigator as any).serial;
 }
 
 function keyFor(info: any): string {
@@ -29,7 +25,7 @@ async function findPairedPort(): Promise<any | null> {
   if (!stored) return null;
   const ports: any[] = await (navigator as any).serial.getPorts();
   if (!Array.isArray(ports) || ports.length === 0) return null;
-  const exact = ports.find((p) => {
+  const exact = ports.find(p => {
     try {
       return keyFor(p.getInfo()) === stored;
     } catch {

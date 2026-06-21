@@ -25,15 +25,14 @@
 //   the browser; the AGENT raw path exists only as a fallback.
 // -----------------------------------------------------------------------------
 
-import express from 'express';
-import cors from 'cors';
-import ptp from 'pdf-to-printer';
 import { spawn } from 'node:child_process';
-import { promises as fs } from 'node:fs';
-import { existsSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { existsSync, promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import cors from 'cors';
+import express from 'express';
+import ptp from 'pdf-to-printer';
 
 const PORT = 3001;
 
@@ -54,12 +53,10 @@ function run(cmd, args) {
   return new Promise((resolve, reject) => {
     const child = spawn(cmd, args, { windowsHide: true });
     let stderr = '';
-    child.stderr?.on('data', (d) => (stderr += d.toString()));
+    child.stderr?.on('data', d => (stderr += d.toString()));
     child.on('error', reject);
-    child.on('close', (code) =>
-      code === 0
-        ? resolve()
-        : reject(new Error(`${cmd} exited with code ${code}${stderr ? `: ${stderr.trim()}` : ''}`))
+    child.on('close', code =>
+      code === 0 ? resolve() : reject(new Error(`${cmd} exited with code ${code}${stderr ? `: ${stderr.trim()}` : ''}`))
     );
   });
 }
@@ -76,7 +73,7 @@ function findBrowser() {
     'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
     env.LOCALAPPDATA && path.join(env.LOCALAPPDATA, 'Microsoft\\Edge\\Application\\msedge.exe'),
   ].filter(Boolean);
-  return candidates.find((p) => existsSync(p)) || null;
+  return candidates.find(p => existsSync(p)) || null;
 }
 
 // Build a unique temp file path with the given extension.
@@ -106,7 +103,7 @@ app.get('/list', async (_req, res) => {
   try {
     const printers = await ptp.getPrinters();
     // Normalise to the { name } shape the app expects.
-    res.json((printers || []).map((p) => ({ name: p.name })));
+    res.json((printers || []).map(p => ({ name: p.name })));
   } catch (e) {
     console.error('list error:', e);
     res.status(500).json({ ok: false, error: String(e?.message || e) });
@@ -132,9 +129,7 @@ app.post('/print', async (req, res) => {
         await printHtml(printer, data);
         break;
       default:
-        return res
-          .status(400)
-          .json({ ok: false, error: `Unknown format "${format}" (expected raw|pdf|html).` });
+        return res.status(400).json({ ok: false, error: `Unknown format "${format}" (expected raw|pdf|html).` });
     }
     res.json({ ok: true });
   } catch (e) {
@@ -188,13 +183,7 @@ async function printHtml(printer, html) {
     await fs.writeFile(htmlFile, html, 'utf8');
     // Headless render to PDF. Unknown flags (e.g. --no-margins) are ignored
     // safely by Chrome; they are kept per the agent spec.
-    await run(browser, [
-      '--headless',
-      '--disable-gpu',
-      '--no-margins',
-      `--print-to-pdf=${pdf}`,
-      htmlFile,
-    ]);
+    await run(browser, ['--headless', '--disable-gpu', '--no-margins', `--print-to-pdf=${pdf}`, htmlFile]);
     await ptp.print(pdf, printer ? { printer } : {});
   } finally {
     await cleanup(htmlFile, pdf);

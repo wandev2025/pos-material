@@ -1,6 +1,7 @@
 // lib/ProfileContext.tsx
-import { Session, User } from '@supabase/supabase-js';
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import type { Session, User } from '@supabase/supabase-js';
+import type React from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from './supabase';
 
 export type Role = 'SUPERADMIN' | 'OWNER' | 'ADMIN' | 'STAFF';
@@ -37,7 +38,9 @@ export const ProfileProvider = ({ children }: { children: React.ReactNode }) => 
       else setIsLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       if (session?.user) fetchProfile(session.user.id);
       else {
@@ -50,11 +53,7 @@ export const ProfileProvider = ({ children }: { children: React.ReactNode }) => 
   }, []);
 
   const fetchProfile = async (userId: string) => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single();
+    const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
 
     if (data) setProfile(data as Profile);
     setIsLoading(false);

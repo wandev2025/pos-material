@@ -13,8 +13,14 @@ export default function PressableScale({ style, onPressIn, onPressOut, scaleTo =
   return (
     <AnimatedPressable
       {...rest}
-      onPressIn={(e) => { scale.value = withTiming(scaleTo, { duration: 110 }); onPressIn?.(e); }}
-      onPressOut={(e) => { scale.value = withTiming(1, { duration: 150 }); onPressOut?.(e); }}
+      onPressIn={e => {
+        scale.value = withTiming(scaleTo, { duration: 110 });
+        onPressIn?.(e);
+      }}
+      onPressOut={e => {
+        scale.value = withTiming(1, { duration: 150 });
+        onPressOut?.(e);
+      }}
       style={[style, aStyle]}
     >
       {children}
