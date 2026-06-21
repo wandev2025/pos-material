@@ -135,6 +135,7 @@ export default function UnifiedPOSHub() {
   const [cashReceivedStr, setCashReceivedStr] = useState('');
   const [downPaymentStr, setDownPaymentStr] = useState('');
   const [discountStr, setDiscountStr] = useState('');
+  const [discountRows, setDiscountRows] = useState<string[]>([]); // cart rows whose per-line discount input is revealed
   const [showDiscount, setShowDiscount] = useState(false);
   const [rows, setRows] = useState<SaleRow[]>([]);
   const [filteredInv, setFilteredInv] = useState<InventoryItem[]>([]);
@@ -333,6 +334,17 @@ export default function UnifiedPOSHub() {
     });
   };
 
+  // Decrement a cart line straight from the palette; removes it at zero.
+  const decrementItem = (item: InventoryItem) => {
+    setRows(prev => prev.flatMap(r => {
+      if (r.item?.id !== item.id) return [r];
+      const qty = parseNum(r.qty) - 1;
+      if (qty < 1) return [];
+      const total = Math.max(0, Math.round(qty * parseNum(r.price) - parseNum(r.discount)));
+      return [{ ...r, qty: String(qty), total: String(total) }];
+    }));
+  };
+
   // Favorites = the most-frequently-sold items, shown when the search is empty.
   const loadPopular = async () => {
     const { data } = await supabase.from('sale_items').select('inventory_id').order('id', { ascending: false }).limit(300);
@@ -506,6 +518,7 @@ export default function UnifiedPOSHub() {
 
   const resetPOS = () => {
     setRows([]);
+    setDiscountRows([]);
     setCatalogQuery('');
     setFilteredInv([]);
     setCustomerName('Umum');
@@ -723,8 +736,7 @@ export default function UnifiedPOSHub() {
             <Text style={[styles.th, { flex: 0.7, textAlign: 'center' }]}>STOK</Text>
             <Text style={[styles.th, { flex: 1.6, textAlign: 'center' }]}>QTY</Text>
             <Text style={[styles.th, { flex: 1.2, textAlign: 'right' }]}>HARGA</Text>
-            <Text style={[styles.th, { flex: 1.2, textAlign: 'center' }]}>DISKON</Text>
-            <Text style={[styles.th, { flex: 1.3, textAlign: 'right', paddingRight: 10 }]}>TOTAL</Text>
+            <Text style={[styles.th, { flex: 1.8, textAlign: 'right', paddingRight: 10 }]}>TOTAL</Text>
             <View style={{ width: 30 }} />
           </View>
           {rows.map((row) => (
@@ -735,8 +747,16 @@ export default function UnifiedPOSHub() {
               <Text style={[styles.mono, styles.cellText, { flex: 0.7 }]}>{row.item?.quantity ?? '-'}</Text>
               {renderStepper(row, { flex: 1.6 })}
               <Text style={[styles.mono, styles.cellPrice, { flex: 1.2 }]}>{formatRupiah(parseNum(row.price))}</Text>
-              <TextInput style={[styles.mono, styles.cellInput, { flex: 1.2 }]} keyboardType="numeric" value={row.discount} onChangeText={t => updateRow(row._id, 'discount', t)} placeholder="0" />
-              <Text style={[styles.mono, styles.cellTotal, { flex: 1.3 }]}>{formatRupiah(parseNum(row.total))}</Text>
+              <View style={{ flex: 1.8, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8, paddingRight: 10 }}>
+                {(discountRows.includes(row._id) || parseNum(row.discount) > 0) ? (
+                  <TextInput style={[styles.mono, styles.cellInput, { width: 60, marginBottom: 0, textAlign: 'center' }]} keyboardType="numeric" value={row.discount} onChangeText={t => updateRow(row._id, 'discount', t)} placeholder="Disk" autoFocus />
+                ) : (
+                  <TouchableOpacity style={styles.discTagBtn} onPress={() => setDiscountRows(prev => [...prev, row._id])}>
+                    <Ionicons name="pricetag-outline" size={14} color="#94A3B8" />
+                  </TouchableOpacity>
+                )}
+                <Text style={[styles.mono, styles.cellTotal]}>{formatRupiah(parseNum(row.total))}</Text>
+              </View>
               <TouchableOpacity onPress={() => removeRow(row._id)} style={styles.removeBtn}>
                 <Ionicons name="trash-outline" size={18} color="#94A3B8" />
               </TouchableOpacity>
@@ -760,13 +780,18 @@ export default function UnifiedPOSHub() {
               <Text style={styles.mRowLabel}>HARGA SATUAN</Text>
               <Text style={[styles.mono, styles.mRowValue]}>{formatRupiah(parseNum(row.price))}</Text>
             </View>
-            <View style={styles.mRow}>
-              <Text style={styles.mRowLabel}>DISKON ITEM</Text>
-              <TextInput style={[styles.mono, styles.mRowInput]} keyboardType="numeric" value={row.discount} onChangeText={t => updateRow(row._id, 'discount', t)} placeholder="0" />
-            </View>
             <View style={styles.mItemFooter}>
               <Text style={styles.mStock}>Stok: {row.item?.quantity ?? '-'}{row.item?.allow_preorder ? ' • Pre-order' : ''}</Text>
-              <Text style={[styles.mono, styles.mTotal]}>{formatRupiah(parseNum(row.total))}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                {(discountRows.includes(row._id) || parseNum(row.discount) > 0) ? (
+                  <TextInput style={[styles.mono, styles.mDiscInput]} keyboardType="numeric" value={row.discount} onChangeText={t => updateRow(row._id, 'discount', t)} placeholder="Disk" autoFocus />
+                ) : (
+                  <TouchableOpacity style={styles.discTagBtn} onPress={() => setDiscountRows(prev => [...prev, row._id])}>
+                    <Ionicons name="pricetag-outline" size={16} color="#94A3B8" />
+                  </TouchableOpacity>
+                )}
+                <Text style={[styles.mono, styles.mTotal]}>{formatRupiah(parseNum(row.total))}</Text>
+              </View>
             </View>
           </View>
         ))
@@ -1082,8 +1107,9 @@ export default function UnifiedPOSHub() {
         getGroup={(i) => i.category || 'Lainnya'}
         favorites={popularItems}
         favoritesTitle="Sering Dijual"
-        isSelected={(i) => rows.some(r => r.item?.id === i.id)}
+        getCount={(i) => { const r = rows.find(x => x.item?.id === i.id); return r ? parseNum(r.qty) : 0; }}
         onSelect={addItemToCart}
+        onRemove={decrementItem}
         keepOpenOnSelect
         footer={
           <>
@@ -1242,6 +1268,8 @@ const styles = StyleSheet.create({
   catalogResults: { position: 'absolute', top: 52, left: 0, right: 0, backgroundColor: '#FFF', borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0', zIndex: 50, elevation: 8, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 12, shadowOffset: { width: 0, height: 4 } },
   catalogEmpty: { padding: 16, textAlign: 'center', color: '#94A3B8', fontWeight: '600' },
   cartItemName: { fontSize: 14, fontWeight: '700', color: '#0F172A' },
+  discTagBtn: { width: 30, height: 30, borderRadius: 8, borderWidth: 1, borderColor: '#E2E8F0', backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center' },
+  mDiscInput: { width: 72, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 6, textAlign: 'center', color: '#111827', backgroundColor: '#F8FAFC', outlineStyle: 'none' as any },
   cartEmpty: { alignItems: 'center', paddingVertical: 40, gap: 10 },
   cartEmptyText: { color: '#94A3B8', fontWeight: '600', fontSize: 13, textAlign: 'center' },
   mItemHead: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 8 },
@@ -1260,7 +1288,7 @@ const styles = StyleSheet.create({
     shadowRadius: 10, 
     elevation: 5 
   },
-  receiptDivider: { height: 1, backgroundColor: '#F1F5F9', marginVertical: 20 },
+  receiptDivider: { height: 1, backgroundColor: '#F1F5F9', marginVertical: 10 },
   totalLabel: { fontSize: 14, fontWeight: '900', color: '#0F172A' },
   grandTotalText: { fontSize: 28, fontWeight: '900', color: '#DC2626' },
   subTotal: { fontSize: 18, fontWeight: '700' },

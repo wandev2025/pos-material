@@ -17,6 +17,7 @@ import { useOnline } from '../../lib/offline/OfflineContext';
 import { useProfile } from '../../lib/ProfileContext';
 import { supabase } from '../../lib/supabase';
 import { toast } from '../../lib/toast';
+import CommandPalette from '../../components/CommandPalette';
 
 // --- HELPERS ---
 const generateId = () => Math.random().toString(36).substring(2, 12);
@@ -31,7 +32,7 @@ const computeStatus = (total: number, paid: number): 'PAID' | 'PARTIAL' | 'UNPAI
 // --- TYPES ---
 interface Supplier { id: number; name: string; phone?: string; address?: string; }
 interface Metric { id: number; unit_name: string; }
-interface InventoryItem { id: number; item_name: string; quantity: number; price: number; cost?: number; }
+interface InventoryItem { id: number; item_name: string; quantity: number; price: number; cost?: number; category?: string | null; }
 interface PurchaseRow { _id: string; item: InventoryItem | null; query: string; qty: string; cost: string; total: string; }
 interface Purchase {
   id: number;
@@ -72,6 +73,10 @@ export default function PembelianScreen() {
   const [supplierQuery, setSupplierQuery] = useState('');
   const [supplierId, setSupplierId] = useState<number | null>(null);
   const [showSupplierList, setShowSupplierList] = useState(false);
+  const [supplierPaletteOpen, setSupplierPaletteOpen] = useState(false);
+  const [itemPaletteRow, setItemPaletteRow] = useState<string | null>(null);
+  const [allItems, setAllItems] = useState<InventoryItem[]>([]);
+  const [allItemsLoading, setAllItemsLoading] = useState(false);
 
   // --- PURCHASE FORM ---
   const [rows, setRows] = useState<PurchaseRow[]>([emptyRow()]);
@@ -166,6 +171,28 @@ export default function PembelianScreen() {
     setNiPrice('');
     setActiveRowId(null);
     setItemResults([]);
+  };
+
+  // --- ITEM PALETTE (shared command-palette picker for the purchase rows) ---
+  const loadAllItems = async () => {
+    setAllItemsLoading(true);
+    const { data } = await supabase.from('inventory').select('id, item_name, quantity, price, cost, category').order('item_name');
+    setAllItems((data as InventoryItem[]) || []);
+    setAllItemsLoading(false);
+  };
+
+  const openItemPalette = (rowId: string) => {
+    setItemPaletteRow(rowId);
+    if (allItems.length === 0) loadAllItems();
+  };
+
+  const startNewItemFromPalette = (name: string) => {
+    if (!itemPaletteRow) return;
+    setNewItemFor(itemPaletteRow);
+    setNiName(name);
+    setNiUnit(metrics[0]?.id ? String(metrics[0].id) : '');
+    setNiPrice('');
+    setItemPaletteRow(null);
   };
 
   const handleCreateItem = async () => {
@@ -316,31 +343,45 @@ export default function PembelianScreen() {
 
       {/* SUPPLIER PICKER */}
       <Text style={styles.label}>Supplier</Text>
-      <View style={{ position: 'relative', zIndex: 30 }}>
-        <View style={styles.inputIconWrap}>
-          <Feather name="truck" size={16} color="#94A3B8" />
-          <TextInput
-            style={styles.inputFlex}
-            placeholder="Cari atau ketik nama supplier baru..."
-            value={supplierQuery}
-            onChangeText={onSupplierChange}
-            onFocus={() => setShowSupplierList(true)}
-          />
-          {supplierId != null && <Feather name="check-circle" size={16} color="#16A34A" />}
-        </View>
-        {showSupplierList && supplierMatches.length > 0 && (
-          <View style={styles.dropdown}>
-            <ScrollView keyboardShouldPersistTaps="handled" nestedScrollEnabled style={{ maxHeight: 200 }}>
-              {supplierMatches.map(s => (
-                <TouchableOpacity key={s.id} style={styles.dropdownItem} onPress={() => selectSupplier(s)}>
-                  <Text style={styles.dropdownName}>{s.name}</Text>
-                  {!!s.phone && <Text style={styles.dropdownSub}>{s.phone}</Text>}
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        )}
-      </View>
+      <TouchableOpacity style={styles.inputIconWrap} onPress={() => setSupplierPaletteOpen(true)} activeOpacity={0.8}>
+        <Feather name="truck" size={16} color="#94A3B8" />
+        <Text style={[styles.inputFlex, { paddingVertical: 12, color: supplierQuery ? '#0F172A' : '#94A3B8' }]} numberOfLines={1}>
+          {supplierQuery || 'Cari atau ketik nama supplier baru...'}
+        </Text>
+        {supplierId != null && <Feather name="check-circle" size={16} color="#16A34A" />}
+      </TouchableOpacity>
+      <CommandPalette<Supplier>
+        visible={supplierPaletteOpen}
+        onClose={() => setSupplierPaletteOpen(false)}
+        items={suppliers}
+        isDesktop={isDesktop}
+        placeholder="Cari atau ketik nama supplier baru..."
+        emptyText="Belum ada supplier."
+        keyExtractor={(s) => s.id}
+        getLabel={(s) => s.name}
+        getSubtitle={(s) => s.phone || ''}
+        onSelect={selectSupplier}
+        allowCreate
+        onCreate={(name) => { setSupplierQuery(name.trim()); setSupplierId(null); }}
+        createLabel={(t) => `Tambah supplier "${t}"`}
+      />
+      <CommandPalette<InventoryItem>
+        visible={itemPaletteRow !== null}
+        onClose={() => setItemPaletteRow(null)}
+        items={allItems}
+        loading={allItemsLoading}
+        isDesktop={isDesktop}
+        placeholder="Cari item atau ketik barang baru..."
+        emptyText="Tidak ada barang."
+        keyExtractor={(i) => i.id}
+        getLabel={(i) => i.item_name}
+        getSubtitle={(i) => `${formatRupiah(i.price)} • Stok: ${i.quantity}`}
+        getGroup={(i) => i.category || 'Lainnya'}
+        onSelect={(i) => { if (itemPaletteRow) selectInvItem(i, itemPaletteRow); }}
+        allowCreate
+        onCreate={startNewItemFromPalette}
+        createLabel={(t) => `Tambah barang baru "${t}"`}
+      />
 
       {/* ITEM TABLE */}
       <Text style={[styles.label, { marginTop: 8 }]}>Barang Diterima</Text>
@@ -357,16 +398,9 @@ export default function PembelianScreen() {
       {rows.map((row) => (
         isDesktop ? (
           <View key={row._id} style={[styles.tableRow, { zIndex: activeRowId === row._id ? 100 : 1 }]}>
-            <View style={{ flex: 2.6, position: 'relative', zIndex: 5 }}>
-              <TextInput
-                style={styles.cellInput}
-                placeholder="Cari item..."
-                value={row.query}
-                onChangeText={t => handleItemSearch(t, row._id)}
-                onFocus={() => setActiveRowId(row._id)}
-              />
-              {renderItemDropdown(row._id)}
-            </View>
+            <TouchableOpacity style={[styles.cellInput, { flex: 2.6, justifyContent: 'center' }]} onPress={() => openItemPalette(row._id)}>
+              <Text style={{ color: row.item ? '#0F172A' : '#94A3B8', fontWeight: '600' }} numberOfLines={1}>{row.item?.item_name || 'Pilih barang...'}</Text>
+            </TouchableOpacity>
             <TextInput style={[styles.cellInput, { flex: 0.9, textAlign: 'center' }]} keyboardType="numeric" value={row.qty} onChangeText={t => updateRow(row._id, 'qty', t)} />
             <TextInput style={[styles.cellInput, { flex: 1.3, textAlign: 'center' }]} keyboardType="numeric" value={row.cost} onChangeText={t => updateRow(row._id, 'cost', t)} placeholder="0" />
             <Text style={[styles.cellTotal, { flex: 1.3 }]}>{formatRupiah(parseNum(row.total))}</Text>
@@ -376,16 +410,9 @@ export default function PembelianScreen() {
           </View>
         ) : (
           <View key={row._id} style={[styles.mCard, { zIndex: activeRowId === row._id ? 100 : 1 }]}>
-            <View style={{ position: 'relative', zIndex: 5 }}>
-              <TextInput
-                style={styles.input}
-                placeholder="Cari item..."
-                value={row.query}
-                onChangeText={t => handleItemSearch(t, row._id)}
-                onFocus={() => setActiveRowId(row._id)}
-              />
-              {renderItemDropdown(row._id)}
-            </View>
+            <TouchableOpacity style={[styles.input, { justifyContent: 'center' }]} onPress={() => openItemPalette(row._id)}>
+              <Text style={{ color: row.item ? '#0F172A' : '#94A3B8', fontWeight: '600' }} numberOfLines={1}>{row.item?.item_name || 'Pilih barang...'}</Text>
+            </TouchableOpacity>
             <View style={styles.mRow}>
               <View style={{ flex: 1, marginRight: 8 }}>
                 <Text style={styles.mLabel}>QTY</Text>

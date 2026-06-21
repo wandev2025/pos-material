@@ -23,6 +23,7 @@ import { parseNum } from '../../lib/number';
 import { useProfile } from '../../lib/ProfileContext';
 import { supabase } from '../../lib/supabase';
 import { toast } from '../../lib/toast';
+import CommandPalette from '../../components/CommandPalette';
 
 // --- TYPES ---
 interface Metric { id: number; unit_name: string; }
@@ -35,6 +36,7 @@ interface InventoryItem {
   metric_id: number;
   allow_preorder?: boolean;
   last_supplier_name?: string | null;
+  category?: string | null;
   metrics?: { unit_name: string };
 }
 interface SplitTarget { _tempId: string; itemId: string; qty: string; }
@@ -66,6 +68,8 @@ export default function InventoryScreen() {
   const [formMinStock, setFormMinStock] = useState('5');
   const [formMetricId, setFormMetricId] = useState<string>("");
   const [formAllowPreorder, setFormAllowPreorder] = useState(false);
+  const [formCategory, setFormCategory] = useState('');
+  const [splitPaletteRow, setSplitPaletteRow] = useState<string | null>(null);
 
   // Targeted Item
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
@@ -74,6 +78,12 @@ export default function InventoryScreen() {
   // Form State: Split Stock
   const [sourceSplitQty, setSourceSplitQty] = useState('1');
   const [splitTargets, setSplitTargets] = useState<SplitTarget[]>([{ _tempId: '1', itemId: "", qty: '' }]);
+
+  // Existing categories (for quick-pick chips in the Add/Edit form).
+  const categories = useMemo(
+    () => [...new Set(inventory.map(i => i.category).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b)),
+    [inventory]
+  );
 
   // Draggable FAB — the + button can be moved out of the way (it overlaps content on mobile).
   const fabPan = useRef(new RNAnimated.ValueXY()).current;
@@ -114,7 +124,8 @@ export default function InventoryScreen() {
       price: parseNum(formPrice),
       min_stock: parseNum(formMinStock),
       metric_id: parseInt(formMetricId),
-      allow_preorder: formAllowPreorder
+      allow_preorder: formAllowPreorder,
+      category: formCategory.trim() || null
     };
 
     let error;
@@ -202,6 +213,7 @@ export default function InventoryScreen() {
     setFormMinStock(item.min_stock.toString());
     setFormMetricId(item.metric_id.toString());
     setFormAllowPreorder(item.allow_preorder ?? false);
+    setFormCategory(item.category ?? '');
     setStockAdjustment('');
     setEditModalVisible(true);
   };
@@ -320,7 +332,7 @@ export default function InventoryScreen() {
         style={[styles.fab, !isDesktop && { bottom: 110 }, { transform: fabPan.getTranslateTransform() }]}
         {...fabResponder.panHandlers}
       >
-        <TouchableOpacity style={styles.fabInner} onPress={() => { setSelectedItem(null); setFormName(''); setFormQty(''); setFormPrice(''); setFormMinStock('5'); setFormAllowPreorder(false); setAddModalVisible(true); }}>
+        <TouchableOpacity style={styles.fabInner} onPress={() => { setSelectedItem(null); setFormName(''); setFormQty(''); setFormPrice(''); setFormMinStock('5'); setFormAllowPreorder(false); setFormCategory(''); setAddModalVisible(true); }}>
           <Feather name="plus" size={30} color="#FFF" />
         </TouchableOpacity>
       </RNAnimated.View>
@@ -353,6 +365,17 @@ export default function InventoryScreen() {
                   );
                 })}
               </View>
+              <Text style={styles.label}>Kategori</Text>
+              <TextInput style={styles.input} value={formCategory} onChangeText={setFormCategory} placeholder="mis. Semen & Perekat" />
+              {categories.length > 0 && (
+                <View style={styles.unitWrap}>
+                  {categories.map(c => (
+                    <TouchableOpacity key={c} onPress={() => setFormCategory(c)} style={[styles.unitChip, formCategory === c && styles.unitChipActive]}>
+                      <Text style={[styles.unitChipText, formCategory === c && styles.unitChipTextActive]}>{c}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
               <View style={styles.switchRow}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.label}>Bisa Pre-order</Text>
@@ -401,6 +424,18 @@ export default function InventoryScreen() {
                     <View style={{flex:1}}><Text style={styles.label}>Minim</Text><TextInput style={styles.input} keyboardType="numeric" value={formMinStock} onChangeText={setFormMinStock}/></View>
                 </View>
 
+                <Text style={styles.label}>Kategori</Text>
+                <TextInput style={styles.input} value={formCategory} onChangeText={setFormCategory} placeholder="mis. Semen & Perekat" />
+                {categories.length > 0 && (
+                  <View style={styles.unitWrap}>
+                    {categories.map(c => (
+                      <TouchableOpacity key={c} onPress={() => setFormCategory(c)} style={[styles.unitChip, formCategory === c && styles.unitChipActive]}>
+                        <Text style={[styles.unitChipText, formCategory === c && styles.unitChipTextActive]}>{c}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+
                 <View style={styles.switchRow}>
                     <View style={{ flex: 1 }}>
                         <Text style={styles.label}>Bisa Pre-order</Text>
@@ -444,14 +479,11 @@ export default function InventoryScreen() {
                     <View style={{alignItems:'center', marginVertical:10}}><Feather name="arrow-down" size={24} color="#CBD5E1" /></View>
                     {splitTargets.map((t, idx) => (
                         <View key={t._tempId} style={styles.splitRow}>
-                            <View style={[styles.pickerWrapper, {flex: 1, marginBottom:0}]}>
-                                <Picker selectedValue={t.itemId} onValueChange={(val) => {
-                                    const n = [...splitTargets]; n[idx].itemId = val; setSplitTargets(n);
-                                }}>
-                                    <Picker.Item label="Pilih Target..." value="" />
-                                    {inventory.filter(i => i.id !== selectedItem?.id).map(i => <Picker.Item key={i.id} label={i.item_name} value={i.id.toString()} />)}
-                                </Picker>
-                            </View>
+                            <TouchableOpacity style={[styles.pickerWrapper, {flex: 1, marginBottom:0, justifyContent:'center', paddingHorizontal: 14}]} onPress={() => setSplitPaletteRow(t._tempId)}>
+                                <Text style={{ color: t.itemId ? '#111827' : '#94A3B8', fontWeight: '600' }} numberOfLines={1}>
+                                    {inventory.find(i => i.id.toString() === t.itemId)?.item_name || 'Pilih Target...'}
+                                </Text>
+                            </TouchableOpacity>
                             <TextInput style={[styles.input, {width: 70, marginLeft: 10, marginBottom:0}]} placeholder="Qty" keyboardType="numeric" value={t.qty} onChangeText={(v) => {
                                 const n = [...splitTargets]; n[idx].qty = v; setSplitTargets(n);
                             }} />
@@ -462,6 +494,20 @@ export default function InventoryScreen() {
                     <TouchableOpacity style={[styles.primaryBtn, {marginTop:30}]} onPress={handleSplitProcess}><Text style={styles.btnText}>KONFIRMASI PECAH STOK</Text></TouchableOpacity>
                 </ScrollView>
             </View>
+            <CommandPalette<InventoryItem>
+              embedded
+              visible={splitPaletteRow !== null}
+              onClose={() => setSplitPaletteRow(null)}
+              items={inventory.filter(i => i.id !== selectedItem?.id)}
+              isDesktop={isDesktop}
+              placeholder="Cari item tujuan..."
+              emptyText="Tidak ada barang lain."
+              keyExtractor={(i) => i.id}
+              getLabel={(i) => i.item_name}
+              getSubtitle={(i) => `Stok: ${i.quantity} ${i.metrics?.unit_name || ''}`}
+              getGroup={(i) => i.category || 'Lainnya'}
+              onSelect={(i) => setSplitTargets(prev => prev.map(t => t._tempId === splitPaletteRow ? { ...t, itemId: i.id.toString() } : t))}
+            />
         </View>
       </Modal>
     </View>
