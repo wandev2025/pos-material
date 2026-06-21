@@ -51,7 +51,7 @@ export function ConfirmHost() {
   }, []);
 
   return (
-    <Modal visible={!!c} transparent animationType="fade" onRequestClose={() => settle(false)}>
+    <Modal visible={!!c} transparent animationType="none" onRequestClose={() => settle(false)}>
       <Pressable style={styles.backdrop} onPress={() => settle(false)}>
         <Pressable style={styles.dialog} onPress={() => {}}>
           <Text style={styles.title}>{c?.title}</Text>
