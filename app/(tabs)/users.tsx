@@ -2,9 +2,7 @@ import { Feather } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
-  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -12,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
+import { confirm } from '../../lib/confirm';
 import { type Role, useProfile } from '../../lib/ProfileContext';
 import { supabase } from '../../lib/supabase';
 import { toast } from '../../lib/toast';
@@ -65,13 +64,7 @@ export default function UsersScreen() {
       else fetchUsers();
     };
     const msg = `Ubah ${target.full_name || 'pengguna'} menjadi ${role}?`;
-    if (Platform.OS === 'web') {
-      if (confirm(msg)) apply();
-    } else
-      Alert.alert('Konfirmasi', msg, [
-        { text: 'Batal', style: 'cancel' },
-        { text: 'Ubah', onPress: apply },
-      ]);
+    if (await confirm({ title: 'Ubah Peran', message: msg, confirmText: 'Ubah' })) apply();
   };
 
   if (!isManager) {

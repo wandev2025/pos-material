@@ -3,7 +3,6 @@ import { Picker } from '@react-native-picker/picker';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   KeyboardAvoidingView,
   Modal,
@@ -21,6 +20,7 @@ import {
 } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import CommandPalette from '../../components/CommandPalette';
+import { confirm } from '../../lib/confirm';
 import { parseNum } from '../../lib/number';
 import { useProfile } from '../../lib/ProfileContext';
 import { supabase } from '../../lib/supabase';
@@ -246,13 +246,13 @@ export default function InventoryScreen() {
         fetchData();
       } else toast.error('Barang sedang digunakan dalam transaksi.');
     };
-    if (Platform.OS === 'web') {
-      if (confirm(`Hapus permanen ${selectedItem.item_name}?`)) performDelete();
-    } else
-      Alert.alert('Hapus', 'Yakin hapus barang ini?', [
-        { text: 'Batal' },
-        { text: 'Hapus', style: 'destructive', onPress: performDelete },
-      ]);
+    const ok = await confirm({
+      title: 'Hapus Barang',
+      message: `Hapus permanen "${selectedItem.item_name}"?`,
+      confirmText: 'Hapus',
+      danger: true,
+    });
+    if (ok) performDelete();
   };
 
   const handleOpenEdit = (item: InventoryItem) => {

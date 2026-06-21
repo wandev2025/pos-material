@@ -2,8 +2,6 @@ import { Feather } from '@expo/vector-icons';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,6 +10,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import { confirm } from '../../lib/confirm';
 import { formatRupiah } from '../../lib/format';
 import { parseNum } from '../../lib/number';
 import { useOnline } from '../../lib/offline/OfflineContext';
@@ -139,14 +138,13 @@ export default function KasirScreen() {
       fetchData();
     };
 
-    if (Platform.OS === 'web') {
-      if (confirm('Tutup kasir sekarang? Sesi tidak dapat dibuka kembali.')) doClose();
-    } else {
-      Alert.alert('Tutup Kasir', 'Tutup kasir sekarang? Sesi tidak dapat dibuka kembali.', [
-        { text: 'Batal' },
-        { text: 'Tutup Kasir', style: 'destructive', onPress: doClose },
-      ]);
-    }
+    const ok = await confirm({
+      title: 'Tutup Kasir',
+      message: 'Tutup kasir sekarang? Sesi tidak dapat dibuka kembali.',
+      confirmText: 'Tutup Kasir',
+      danger: true,
+    });
+    if (ok) doClose();
   };
 
   if (!me) {

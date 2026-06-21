@@ -4,6 +4,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { useEffect } from 'react';
 import { ActivityIndicator, Platform, View } from 'react-native';
 import OfflineBanner from '../components/OfflineBanner';
+import { ConfirmHost } from '../lib/confirm';
 import { OfflineProvider } from '../lib/offline/OfflineContext';
 import { ProfileProvider, useProfile } from '../lib/ProfileContext';
 import { Toaster } from '../lib/toast';
@@ -79,6 +80,7 @@ export default function RootLayout() {
           <OfflineBanner />
           <RootLayoutNav />
           <Toaster />
+          <ConfirmHost />
         </View>
       </ProfileProvider>
     </OfflineProvider>
