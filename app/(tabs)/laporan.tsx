@@ -90,9 +90,12 @@ export default function LaporanScreen() {
   // --- DERIVED METRICS ---
   const summary = useMemo(() => {
     const revenue = sales.reduce((a, s) => a + (s.total_amount || 0), 0);
-    const discount = sales.reduce((a, s) => a + (s.discount || 0), 0);
+    // Total discount = catalog gross (price x qty) minus net paid — captures BOTH
+    // per-line item discounts and the transaction-level discount.
+    const gross = items.reduce((a, i) => a + (i.price_at_sale || 0) * (i.quantity || 0), 0);
+    const discount = Math.max(0, gross - revenue);
     return { count: sales.length, revenue, avg: sales.length ? revenue / sales.length : 0, discount };
-  }, [sales]);
+  }, [sales, items]);
 
   const daily = useMemo(() => {
     const bucket: Record<string, number> = {};
