@@ -278,11 +278,22 @@ export default function InventoryScreen() {
              </View>
              <ScrollView showsVerticalScrollIndicator={false}>
                 <View style={styles.adjustBox}>
-                    <Text style={styles.label}>Update Stok (Tambah/Kurang)</Text>
-                    <View style={styles.row}>
-                        <TextInput style={[styles.input, {flex:1, marginBottom:0}]} placeholder="+/- Qty" keyboardType="numeric" value={stockAdjustment} onChangeText={setStockAdjustment} />
-                        <TouchableOpacity style={[styles.primaryBtn, {marginLeft:10, marginTop:0}]} onPress={handleAdjustStock}><Text style={styles.btnText}>UPDATE</Text></TouchableOpacity>
+                    <Text style={styles.label}>Stok Saat Ini</Text>
+                    <Text style={styles.currentStock}>{selectedItem?.quantity ?? 0} {selectedItem?.metrics?.unit_name ?? ''}</Text>
+
+                    <Text style={[styles.label, { marginTop: 14 }]}>Update Stok (Tambah / Kurang)</Text>
+                    <View style={styles.adjustRow}>
+                        <TouchableOpacity style={styles.adjStepBtn} onPress={() => setStockAdjustment(String(parseNum(stockAdjustment) - 1))}>
+                            <Feather name="minus" size={20} color="#DC2626" />
+                        </TouchableOpacity>
+                        <TextInput style={styles.adjInput} placeholder="0" keyboardType="numbers-and-punctuation" value={stockAdjustment} onChangeText={setStockAdjustment} />
+                        <TouchableOpacity style={styles.adjStepBtn} onPress={() => setStockAdjustment(String(parseNum(stockAdjustment) + 1))}>
+                            <Feather name="plus" size={20} color="#16A34A" />
+                        </TouchableOpacity>
                     </View>
+                    <Text style={styles.adjPreview}>Stok menjadi: <Text style={{ fontWeight: '900', color: '#111827' }}>{(selectedItem?.quantity ?? 0) + parseNum(stockAdjustment)} {selectedItem?.metrics?.unit_name ?? ''}</Text></Text>
+
+                    <TouchableOpacity style={[styles.primaryBtn, { marginTop: 14 }]} onPress={handleAdjustStock}><Text style={styles.btnText}>UPDATE STOK</Text></TouchableOpacity>
                 </View>
 
                 <Text style={styles.label}>Nama Produk</Text>
@@ -392,6 +403,11 @@ const styles = StyleSheet.create({
   btnText: { color: '#FFF', fontWeight: '900', fontSize: 14, letterSpacing: 0.5 },
   
   adjustBox: { backgroundColor: '#F9FAFB', padding: 15, borderRadius: 18, marginBottom: 20, borderWidth: 1, borderColor: '#E5E7EB' },
+  currentStock: { fontSize: 26, fontWeight: '900', color: '#111827', marginTop: 2 },
+  adjustRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6 },
+  adjStepBtn: { width: 52, height: 52, borderRadius: 14, backgroundColor: '#FFF', borderWidth: 1, borderColor: '#E5E7EB', justifyContent: 'center', alignItems: 'center' },
+  adjInput: { flex: 1, minWidth: 0, backgroundColor: '#FFF', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 14, paddingVertical: 14, fontSize: 18, textAlign: 'center', color: '#111827', fontWeight: '800' },
+  adjPreview: { fontSize: 13, color: '#64748B', marginTop: 10 },
   splitBtn: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', padding: 15, borderRadius: 14, borderWidth: 1, borderColor: '#FEE2E2', marginTop: 15, marginBottom: 10 },
   splitBtnText: { color: '#DC2626', fontWeight: '800', fontSize: 12 },
   deleteBtn: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 10, padding: 10 },
