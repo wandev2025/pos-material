@@ -2,7 +2,7 @@ import { Feather } from '@expo/vector-icons';
 import * as Print from 'expo-print';
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator, Platform, ScrollView,
+  ActivityIndicator, Alert, Platform, ScrollView,
   StyleSheet, Text, TouchableOpacity, useWindowDimensions, View
 } from 'react-native';
 import { useProfile } from '../../lib/ProfileContext';
@@ -152,7 +152,7 @@ export default function LaporanScreen() {
         h1{font-size:20px;margin:0} h2{font-size:14px;margin:24px 0 8px;border-bottom:1px solid #CBD5E1;padding-bottom:4px}
         table{width:100%;border-collapse:collapse} td,th{padding:6px 4px;font-size:12px;border-bottom:1px solid #E2E8F0;text-align:left}
         .muted{color:#64748B;font-size:12px}
-      </style></head><body>
+      </style><script>window.onload=function(){setTimeout(function(){window.print();},250);};</script></head><body>
         <h1>Laporan Penjualan</h1>
         <div class="muted">${presetLabel} • dicetak ${new Date().toLocaleString('id-ID')}</div>
         <h2>Ringkasan</h2>
@@ -160,6 +160,7 @@ export default function LaporanScreen() {
           ${row('Total Penjualan', formatRupiah(summary.revenue))}
           ${row('Jumlah Transaksi', String(summary.count))}
           ${row('Rata-rata / Transaksi', formatRupiah(summary.avg))}
+          ${row('Total Diskon', formatRupiah(summary.discount))}
         </table>
         <h2>Metode Bayar</h2>
         <table>${byPayment.map((p) => row(`${p.label} (${p.count})`, formatRupiah(p.total))).join('')}</table>
@@ -181,6 +182,53 @@ export default function LaporanScreen() {
     }
   };
 
+  // Excel-friendly CSV of the period's transactions. Web downloads it directly;
+  // on native it points to the web app (file-sharing there needs expo-sharing).
+  const exportCSV = () => {
+    if (Platform.OS !== 'web') {
+      Alert.alert('Ekspor Excel', 'Ekspor Excel (CSV) tersedia di aplikasi web.');
+      return;
+    }
+    const presetLabel = PRESETS.find((p) => p.key === preset)?.label || '';
+    const esc = (v: any) => {
+      const s = String(v ?? '');
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const headers = ['Tanggal', 'Pelanggan', 'Metode', 'Status', 'Subtotal', 'Diskon', 'Total', 'Kasir'];
+    const lines = [
+      `Laporan Penjualan,${esc(presetLabel)}`,
+      `Dibuat,${esc(new Date().toLocaleString('id-ID'))}`,
+      '',
+      headers.join(','),
+    ];
+    sales.forEach((s) => {
+      const disc = s.discount || 0;
+      const total = s.total_amount || 0;
+      lines.push([
+        esc(new Date(s.created_at).toLocaleString('id-ID')),
+        esc(s.customer_name),
+        esc(s.payment_method),
+        esc(s.status),
+        total + disc,
+        disc,
+        total,
+        esc(s.employee_name),
+      ].join(','));
+    });
+    lines.push('');
+    lines.push(['', '', '', 'TOTAL', '', summary.discount, summary.revenue, ''].join(','));
+
+    const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `laporan-${preset}-${localKey(new Date())}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   if (!isManager) {
     return <View style={styles.center}><Text style={styles.denied}>Akses Manajer Diperlukan</Text></View>;
   }
@@ -189,10 +237,16 @@ export default function LaporanScreen() {
     <ScrollView style={styles.container} contentContainerStyle={{ paddingHorizontal: isDesktop ? 20 : 14, paddingTop: 16, paddingBottom: 60 }}>
       <View style={styles.headerRow}>
         <Text style={styles.title}>Laporan</Text>
-        <TouchableOpacity style={styles.printBtn} onPress={printReport}>
-          <Feather name="printer" size={15} color="#FFF" />
-          <Text style={styles.printBtnText}>Cetak</Text>
-        </TouchableOpacity>
+        <View style={styles.exportBtns}>
+          <TouchableOpacity style={styles.exportBtn} onPress={printReport}>
+            <Feather name="file-text" size={14} color="#FFF" />
+            <Text style={styles.exportBtnText}>PDF</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.exportBtn, styles.excelBtn]} onPress={exportCSV}>
+            <Feather name="download" size={14} color="#FFF" />
+            <Text style={styles.exportBtnText}>Excel</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Date presets */}
@@ -308,6 +362,10 @@ const styles = StyleSheet.create({
   title: { fontSize: 24, fontWeight: '900', color: '#111827' },
   printBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#0F172A', paddingHorizontal: 14, paddingVertical: 9, borderRadius: 10 },
   printBtnText: { color: '#FFF', fontWeight: '800', fontSize: 12 },
+  exportBtns: { flexDirection: 'row', gap: 8 },
+  exportBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#0F172A', paddingHorizontal: 12, paddingVertical: 9, borderRadius: 10 },
+  excelBtn: { backgroundColor: '#059669' },
+  exportBtnText: { color: '#FFF', fontWeight: '800', fontSize: 12 },
   presetRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
   preset: { paddingHorizontal: 16, paddingVertical: 9, borderRadius: 20, backgroundColor: '#FFF', borderWidth: 1, borderColor: '#E5E7EB' },
   presetActive: { backgroundColor: '#DC2626', borderColor: '#DC2626' },
