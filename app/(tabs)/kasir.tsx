@@ -9,6 +9,7 @@ import { parseNum } from '../../lib/number';
 import { useOnline } from '../../lib/offline/OfflineContext';
 import { useProfile } from '../../lib/ProfileContext';
 import { supabase } from '../../lib/supabase';
+import { toast } from '../../lib/toast';
 
 interface CashSession {
   id: number;
@@ -96,7 +97,7 @@ export default function KasirScreen() {
       p: { employee_name: me, opening_float: parseNum(openingFloat) },
     });
     setSaving(false);
-    if (error) return Alert.alert('Gagal', error.message);
+    if (error) return toast.error(error.message);
     setOpeningFloat('');
     setCloseResult(null);
     fetchData();
@@ -104,7 +105,7 @@ export default function KasirScreen() {
 
   const handleCloseSession = async () => {
     if (!online || saving || !session) return;
-    if (!countedCash) return Alert.alert('Error', 'Masukkan jumlah uang fisik di laci');
+    if (!countedCash) return toast.error('Masukkan jumlah uang fisik di laci');
     const counted = parseNum(countedCash);
 
     const doClose = async () => {
@@ -113,7 +114,7 @@ export default function KasirScreen() {
         p: { session_id: session.id, counted_cash: counted },
       });
       setSaving(false);
-      if (error) return Alert.alert('Gagal', error.message);
+      if (error) return toast.error(error.message);
       setCountedCash('');
       setCloseResult(data as CashSession);
       fetchData();

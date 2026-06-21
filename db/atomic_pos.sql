@@ -42,6 +42,10 @@
 -- actually has — but forgot to restock in the app — never blocks a sale.
 alter table inventory add column if not exists allow_preorder boolean not null default false;
 
+-- Optional category for grouping items in the POS palette (Semen, Besi, Cat...).
+-- Null is treated as "Lainnya" in the UI.
+alter table inventory add column if not exists category text;
+
 -- Rupiah discounts: a per-line discount on each item, and a transaction-level
 -- discount on the whole sale. total_amount is always stored as the NET payable.
 alter table sales      add column if not exists discount numeric not null default 0;

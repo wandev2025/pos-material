@@ -2,8 +2,9 @@ import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { supabase } from '../lib/supabase';
+import { toast } from '../lib/toast';
 
 export default function SignupScreen() {
   const router = useRouter();
@@ -16,7 +17,7 @@ export default function SignupScreen() {
 
   async function handleSignup() {
     if (!fullName || !email || !password) {
-      Alert.alert('Error', 'Harap isi semua kolom');
+      toast.error('Harap isi semua kolom');
       return;
     }
 
@@ -29,14 +30,13 @@ export default function SignupScreen() {
       });
 
       if (error) {
-        Alert.alert('Signup Gagal', error.message);
+        toast.error('Signup Gagal', error.message);
       } else {
-        Alert.alert('Berhasil', 'Akun berhasil dibuat! Silahkan login.', [
-          { text: 'OK', onPress: () => router.replace('/login' as any) }
-        ]);
+        toast.success('Akun berhasil dibuat! Silahkan login.');
+        router.replace('/login' as any);
       }
     } catch (err) {
-      Alert.alert('System Error', 'Terjadi kesalahan.');
+      toast.error('Terjadi kesalahan.');
     } finally {
       setLoading(false);
     }

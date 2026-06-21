@@ -7,6 +7,7 @@ import {
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { Role, useProfile } from '../../lib/ProfileContext';
 import { supabase } from '../../lib/supabase';
+import { toast } from '../../lib/toast';
 
 interface UserRow {
   id: string;
@@ -37,7 +38,7 @@ export default function UsersScreen() {
   const fetchUsers = async () => {
     setLoading(true);
     const { data, error } = await supabase.from('profiles').select('id, full_name, role').order('full_name');
-    if (error) Alert.alert('Error', error.message);
+    if (error) toast.error(error.message);
     if (data) setUsers(data as UserRow[]);
     setLoading(false);
   };
@@ -47,11 +48,11 @@ export default function UsersScreen() {
   const changeRole = async (target: UserRow, role: Role) => {
     if (target.role === role) return;
     if (target.role === 'SUPERADMIN' && !isSuperadmin) {
-      return Alert.alert('Ditolak', 'Hanya superadmin yang dapat mengubah superadmin.');
+      return toast.error('Hanya superadmin yang dapat mengubah superadmin.');
     }
     const apply = async () => {
       const { error } = await supabase.from('profiles').update({ role }).eq('id', target.id);
-      if (error) Alert.alert('Gagal', error.message);
+      if (error) toast.error(error.message);
       else fetchUsers();
     };
     const msg = `Ubah ${target.full_name || 'pengguna'} menjadi ${role}?`;

@@ -1,7 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator, Alert,
+  ActivityIndicator,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -18,6 +18,7 @@ import { parseNum } from '../../lib/number';
 import { useOnline } from '../../lib/offline/OfflineContext';
 import { useProfile } from '../../lib/ProfileContext';
 import { supabase } from '../../lib/supabase';
+import { toast } from '../../lib/toast';
 
 const fmtDate = (iso: string) =>
   new Date(iso).toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -140,7 +141,7 @@ export default function ReturScreen() {
       }));
 
     if (itemsToReturn.length === 0) {
-      return Alert.alert('Tidak ada barang', 'Pilih minimal satu barang dan jumlah yang diretur.');
+      return toast.error('Pilih minimal satu barang dan jumlah yang diretur.');
     }
 
     setSubmitting(true);
@@ -156,7 +157,7 @@ export default function ReturScreen() {
     setSubmitting(false);
 
     if (error) {
-      return Alert.alert('Gagal', error.message);
+      return toast.error(error.message);
     }
 
     const result = data as ReturnRow;
@@ -166,8 +167,7 @@ export default function ReturScreen() {
       ? `Dana tunai dikembalikan: ${formatRupiah(result.refund_amount)}`
       : `Piutang pelanggan dikurangi: ${formatRupiah(result?.refund_amount ?? refundTotal)}`;
 
-    if (Platform.OS === 'web') alert(`${title}\n\n${msg}`);
-    else Alert.alert(title, msg);
+    toast.success(title, msg);
 
     setModalVisible(false);
     fetchData();

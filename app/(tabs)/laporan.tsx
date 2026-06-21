@@ -2,12 +2,13 @@ import { Feather } from '@expo/vector-icons';
 import * as Print from 'expo-print';
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Platform, ScrollView,
+  ActivityIndicator, Platform, ScrollView,
   StyleSheet, Text, TouchableOpacity, useWindowDimensions, View
 } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useProfile } from '../../lib/ProfileContext';
 import { supabase } from '../../lib/supabase';
+import { toast } from '../../lib/toast';
 
 const formatRupiah = (n: number) =>
   new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(Math.round(n) || 0);
@@ -192,7 +193,7 @@ export default function LaporanScreen() {
   // on native it points to the web app (file-sharing there needs expo-sharing).
   const exportCSV = () => {
     if (Platform.OS !== 'web') {
-      Alert.alert('Ekspor Excel', 'Ekspor Excel (CSV) tersedia di aplikasi web.');
+      toast.info('Ekspor Excel (CSV) tersedia di aplikasi web.');
       return;
     }
     const presetLabel = PRESETS.find((p) => p.key === preset)?.label || '';

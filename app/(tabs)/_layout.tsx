@@ -263,7 +263,7 @@ function TabButton({ item, active, onPress }: { item: any; active: boolean; onPr
       onPress={onPress}
       onPressIn={() => { scale.value = withTiming(0.9, { duration: 110 }); }}
       onPressOut={() => { scale.value = withTiming(1, { duration: 150 }); }}
-      layout={LinearTransition.duration(240)}
+      layout={LinearTransition.duration(140)}
       style={[tabStyles.tab, active && tabStyles.tabActive, aStyle]}
     >
       <Feather name={item.icon as any} size={20} color={active ? '#FFF' : '#64748B'} />
@@ -299,7 +299,7 @@ function FloatingTabBar() {
   // same spot to return to the original bar.
   const renderRow = (circle: 'grid' | 'close', wrapStyle: any, pe: 'box-none' | 'auto') => (
     <View style={[wrapStyle, { paddingBottom: Math.max(insets.bottom, 10) }]} pointerEvents={pe}>
-      <Animated.View style={tabStyles.pill} layout={LinearTransition.duration(240)}>
+      <Animated.View style={tabStyles.pill} layout={LinearTransition.duration(100)}>
         {PRIMARY_NAV.map((item) => (
           <TabButton key={item.path} item={item} active={pathname === item.path} onPress={() => go(item.route)} />
         ))}

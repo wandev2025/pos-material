@@ -6,6 +6,7 @@ import { ActivityIndicator, Platform, View } from 'react-native';
 import OfflineBanner from '../components/OfflineBanner';
 import { OfflineProvider } from '../lib/offline/OfflineContext';
 import { ProfileProvider, useProfile } from '../lib/ProfileContext';
+import { Toaster } from '../lib/toast';
 
 function RootLayoutNav() {
   const { session, isLoading: profileLoading } = useProfile();
@@ -75,6 +76,7 @@ export default function RootLayout() {
         <View style={{ flex: 1 }}>
           <OfflineBanner />
           <RootLayoutNav />
+          <Toaster />
         </View>
       </ProfileProvider>
     </OfflineProvider>

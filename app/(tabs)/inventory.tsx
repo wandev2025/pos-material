@@ -1,11 +1,13 @@
 import { Feather } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator, Alert,
+    Animated as RNAnimated,
     FlatList,
     KeyboardAvoidingView,
     Modal,
+    PanResponder,
     Platform,
     ScrollView,
     StyleSheet,
@@ -20,6 +22,7 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 import { parseNum } from '../../lib/number';
 import { useProfile } from '../../lib/ProfileContext';
 import { supabase } from '../../lib/supabase';
+import { toast } from '../../lib/toast';
 
 // --- TYPES ---
 interface Metric { id: number; unit_name: string; }
@@ -72,6 +75,16 @@ export default function InventoryScreen() {
   const [sourceSplitQty, setSourceSplitQty] = useState('1');
   const [splitTargets, setSplitTargets] = useState<SplitTarget[]>([{ _tempId: '1', itemId: "", qty: '' }]);
 
+  // Draggable FAB — the + button can be moved out of the way (it overlaps content on mobile).
+  const fabPan = useRef(new RNAnimated.ValueXY()).current;
+  const fabResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 4 || Math.abs(g.dy) > 4,
+      onPanResponderGrant: () => fabPan.extractOffset(),
+      onPanResponderMove: RNAnimated.event([null, { dx: fabPan.x, dy: fabPan.y }], { useNativeDriver: false }),
+    })
+  ).current;
+
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -93,7 +106,7 @@ export default function InventoryScreen() {
 
   // --- LOGIC: SAVE / UPDATE PRODUCT ---
   const handleSaveProduct = async () => {
-    if (!formName || !formMetricId) return Alert.alert('Error', 'Nama dan Satuan wajib diisi');
+    if (!formName || !formMetricId) return toast.error('Nama dan Satuan wajib diisi');
     
     setLoading(true);
     const payload = {
@@ -118,7 +131,7 @@ export default function InventoryScreen() {
       setEditModalVisible(false);
       fetchData();
     } else {
-      Alert.alert('Gagal', error.message);
+      toast.error(error.message);
     }
     setLoading(false);
   };
@@ -148,8 +161,8 @@ export default function InventoryScreen() {
     const sourceQty = parseNum(sourceSplitQty);
     const validTargets = splitTargets.filter(t => t.itemId !== "" && parseNum(t.qty) > 0);
 
-    if (sourceQty <= 0) return Alert.alert('Error', 'Qty diambil tidak valid');
-    if (sourceQty > selectedItem.quantity) return Alert.alert('Error', 'Stok tidak mencukupi');
+    if (sourceQty <= 0) return toast.error('Qty diambil tidak valid');
+    if (sourceQty > selectedItem.quantity) return toast.error('Stok tidak mencukupi');
     
     setLoading(true);
     // 1. Reduce Source
@@ -176,7 +189,7 @@ export default function InventoryScreen() {
     const performDelete = async () => {
       const { error } = await supabase.from('inventory').delete().eq('id', selectedItem.id);
       if (!error) { setEditModalVisible(false); fetchData(); }
-      else Alert.alert('Gagal', 'Barang sedang digunakan dalam transaksi.');
+      else toast.error('Barang sedang digunakan dalam transaksi.');
     };
     if (Platform.OS === 'web') { if (confirm(`Hapus permanen ${selectedItem.item_name}?`)) performDelete(); }
     else Alert.alert('Hapus', 'Yakin hapus barang ini?', [{ text: 'Batal' }, { text: 'Hapus', style: 'destructive', onPress: performDelete }]);
@@ -194,7 +207,7 @@ export default function InventoryScreen() {
   };
 
   const exportCSV = () => {
-    if (Platform.OS !== 'web') { Alert.alert('Ekspor', 'Ekspor CSV tersedia di aplikasi web.'); return; }
+    if (Platform.OS !== 'web') { toast.info('Ekspor CSV tersedia di aplikasi web.'); return; }
     const esc = (v: any) => { const s = String(v ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
     const lines = [['Nama', 'Stok', 'Satuan', 'Harga', 'Nilai', 'Batas Minim', 'Supplier'].join(',')];
     inventory.forEach(i => lines.push([esc(i.item_name), i.quantity, esc(i.metrics?.unit_name || ''), i.price, i.price * i.quantity, i.min_stock, esc(i.last_supplier_name || '')].join(',')));
@@ -224,6 +237,13 @@ export default function InventoryScreen() {
     );
   }, [inventory, search, invFilter, invSort]);
 
+  const sortControl = (
+    <TouchableOpacity onPress={() => setInvSort(s => s === 'name' ? 'stock' : s === 'stock' ? 'value' : 'name')} style={styles.sortBtn}>
+      <Feather name="bar-chart-2" size={13} color="#0F172A" />
+      <Text style={styles.sortText}>{invSort === 'name' ? 'A-Z' : invSort === 'stock' ? 'Stok' : 'Nilai'}</Text>
+    </TouchableOpacity>
+  );
+
   return (
     <View style={styles.container}>
       {/* HEADER */}
@@ -242,23 +262,27 @@ export default function InventoryScreen() {
         <View style={styles.ovItem}><Text style={styles.ovLabel}>NILAI STOK</Text><Text style={styles.ovVal} numberOfLines={1} adjustsFontSizeToFit>Rp {overview.value.toLocaleString('id-ID')}</Text></View>
         <View style={styles.ovItem}><Text style={styles.ovLabel}>STOK MINIM</Text><Text style={[styles.ovVal, overview.low > 0 && { color: '#DC2626' }]}>{overview.low}</Text></View>
       </View>
-      <View style={[styles.filterRow, { paddingHorizontal: isDesktop ? 40 : 14 }]}>
+      <View style={[styles.filterRow, { paddingHorizontal: isDesktop ? 40 : 14 }, !isDesktop && { borderBottomWidth: 0, paddingBottom: 6 }]}>
         {([['all', 'Semua'], ['low', 'Stok Minim'], ['out', 'Habis'], ['preorder', 'Pre-order']] as const).map(([k, l]) => (
           <TouchableOpacity key={k} onPress={() => setInvFilter(k)} style={[styles.fChip, invFilter === k && styles.fChipActive]}>
             <Text style={[styles.fChipText, invFilter === k && styles.fChipTextActive]}>{l}</Text>
           </TouchableOpacity>
         ))}
-        <TouchableOpacity onPress={() => setInvSort(s => s === 'name' ? 'stock' : s === 'stock' ? 'value' : 'name')} style={styles.sortBtn}>
-          <Feather name="bar-chart-2" size={13} color="#0F172A" />
-          <Text style={styles.sortText}>{invSort === 'name' ? 'A-Z' : invSort === 'stock' ? 'Stok' : 'Nilai'}</Text>
-        </TouchableOpacity>
+        {isDesktop && sortControl}
       </View>
+      {/* Mobile: sort sits on its own row under the filter pills (not cramped to the right). */}
+      {!isDesktop && (
+        <View style={styles.sortRowMobile}>
+          <Text style={styles.sortRowLabel}>Urutkan</Text>
+          {sortControl}
+        </View>
+      )}
 
       {/* LIST */}
       {loading && !addModalVisible ? <ActivityIndicator style={{marginTop: 50}} color="#DC2626" /> : (
         <FlatList
           data={filtered.slice(0, visibleCount)}
-          contentContainerStyle={{ padding: isDesktop ? 40 : 14 }}
+          contentContainerStyle={{ padding: isDesktop ? 40 : 14, paddingBottom: isDesktop ? 40 : 140 }}
           renderItem={({ item }) => {
             const isLow = item.quantity <= item.min_stock;
             return (
@@ -291,10 +315,15 @@ export default function InventoryScreen() {
         />
       )}
 
-      {/* FAB: ADD */}
-      <TouchableOpacity style={[styles.fab, !isDesktop && { bottom: 110 }]} onPress={() => { setSelectedItem(null); setFormName(''); setFormQty(''); setFormPrice(''); setFormMinStock('5'); setFormAllowPreorder(false); setAddModalVisible(true); }}>
-        <Feather name="plus" size={30} color="#FFF" />
-      </TouchableOpacity>
+      {/* FAB: ADD — draggable (long-press-free: just drag) so it can be moved off content */}
+      <RNAnimated.View
+        style={[styles.fab, !isDesktop && { bottom: 110 }, { transform: fabPan.getTranslateTransform() }]}
+        {...fabResponder.panHandlers}
+      >
+        <TouchableOpacity style={styles.fabInner} onPress={() => { setSelectedItem(null); setFormName(''); setFormQty(''); setFormPrice(''); setFormMinStock('5'); setFormAllowPreorder(false); setAddModalVisible(true); }}>
+          <Feather name="plus" size={30} color="#FFF" />
+        </TouchableOpacity>
+      </RNAnimated.View>
 
       {/* MODAL: ADD MATERIAL */}
       <Modal visible={addModalVisible} transparent animationType="fade">
@@ -457,6 +486,8 @@ const styles = StyleSheet.create({
   fChipTextActive: { color: '#FFF' },
   sortBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 18, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#E2E8F0', marginLeft: 'auto' },
   sortText: { fontSize: 12, fontWeight: '800', color: '#0F172A' },
+  sortRowMobile: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+  sortRowLabel: { fontSize: 11, fontWeight: '800', color: '#94A3B8', textTransform: 'uppercase' },
   
   itemCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', padding: 18, borderRadius: 20, marginBottom: 12, borderWidth: 1, borderColor: '#E5E7EB', elevation: 2 },
   cardLow: { borderColor: '#FEE2E2', backgroundColor: '#FFF5F5' },
@@ -470,6 +501,7 @@ const styles = StyleSheet.create({
   lowBadge: { fontSize: 9, fontWeight: '900', color: '#DC2626', marginTop: 4 },
 
   fab: { position: 'absolute', bottom: 30, right: 30, width: 60, height: 60, borderRadius: 20, backgroundColor: '#DC2626', justifyContent: 'center', alignItems: 'center', elevation: 5 },
+  fabInner: { width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   modalOverlayMobile: { padding: 0 },

@@ -6,10 +6,11 @@ import type { DocConfig, DocType, PaperProfile, PrintConfig, TransportId } from 
 import { clearPairedDevice, getPairedDevice } from '@/lib/printerStore';
 import { useProfile } from '@/lib/ProfileContext';
 import { supabase } from '@/lib/supabase';
+import { toast } from '@/lib/toast';
 import { Feather } from '@expo/vector-icons';
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator, Alert,
+  ActivityIndicator,
   Platform,
   ScrollView, StyleSheet, Text,
   TextInput, TouchableOpacity, useWindowDimensions, View
@@ -148,8 +149,8 @@ export default function SetupScreen() {
   // Pair / forget must run from a real user gesture (handled by the button onPress).
   const handlePair = async (kind: 'WEBUSB' | 'WEBSERIAL') => {
     const serial = kind === 'WEBUSB' ? await pairWebUsb() : await pairWebSerial();
-    if (serial) Alert.alert('Berhasil', `Printer terhubung: ${serial}`);
-    else Alert.alert('Gagal', 'Pemasangan dibatalkan atau tidak didukung di perangkat ini (butuh Chrome/Edge).');
+    if (serial) toast.success(`Printer terhubung: ${serial}`);
+    else toast.error('Pemasangan dibatalkan atau tidak didukung di perangkat ini (butuh Chrome/Edge).');
     refreshPaired();
   };
 
@@ -176,15 +177,15 @@ export default function SetupScreen() {
       { item_name: 'Test Item B', quantity: 3, price_at_sale: 5000 },
     ];
     const result = await printDocument({ docType: doc, settings, sale: dummySale, items: dummyItems, config });
-    if (!result.ok) Alert.alert('Cetak Gagal', 'Tidak ada metode cetak yang tersedia.');
+    if (!result.ok) toast.error('Tidak ada metode cetak yang tersedia.');
   };
 
   const handleSave = async () => {
     setLoading(true);
     const { error } = await supabase.from('print_settings').update(settings).eq('id', 1);
     setLoading(false);
-    if (!error) Alert.alert("Sukses", "Pengaturan disimpan");
-    else Alert.alert("Error", error.message);
+    if (!error) toast.success("Pengaturan disimpan");
+    else toast.error(error.message);
   };
 
   // --- ACTIONS ---

@@ -2,19 +2,23 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { createElement, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Keyboard, KeyboardAvoidingView,
-  Modal, Platform, ScrollView, StyleSheet, Text,
+  ActivityIndicator, Alert,
+  KeyboardAvoidingView,
+  Modal, Platform,
+  ScrollView, StyleSheet, Text,
   TextInput, TouchableOpacity, useWindowDimensions, View, ViewStyle
 } from 'react-native';
 import Animated, { FadeInDown, FadeOutUp, useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
-import { DeliveryOrderPreview, InvoicePreview, ThermalPreview } from '../../components/PrintPreviews';
+import CommandPalette from '../../components/CommandPalette';
 import PressableScale from '../../components/PressableScale';
+import { DeliveryOrderPreview, InvoicePreview, ThermalPreview } from '../../components/PrintPreviews';
 import { parseNum } from '../../lib/number';
 import { useOnline } from '../../lib/offline/OfflineContext';
 import type { DocType, PrintConfig } from '../../lib/printing';
 import { DEFAULT_PRINT_CONFIG, generatePrintHtml, printDocument } from '../../lib/printing';
 import { useProfile } from '../../lib/ProfileContext';
 import { supabase } from '../../lib/supabase';
+import { toast } from '../../lib/toast';
 
 // --- TYPES ---
 interface Profile {
@@ -29,6 +33,7 @@ interface InventoryItem {
   quantity: number;
   price: number;
   allow_preorder?: boolean;
+  category?: string | null;
 }
 
 interface PaymentMethod {
@@ -131,9 +136,14 @@ export default function UnifiedPOSHub() {
   const [downPaymentStr, setDownPaymentStr] = useState('');
   const [discountStr, setDiscountStr] = useState('');
   const [showDiscount, setShowDiscount] = useState(false);
-  const [rows, setRows] = useState<SaleRow[]>([emptyRow()]);
-  const [activeRowId, setActiveRowId] = useState<string | null>(null);
+  const [rows, setRows] = useState<SaleRow[]>([]);
   const [filteredInv, setFilteredInv] = useState<InventoryItem[]>([]);
+  const [catalogQuery, setCatalogQuery] = useState('');
+  const [popularItems, setPopularItems] = useState<InventoryItem[]>([]);
+  // Command-palette item picker (opens with the "/" key on desktop)
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [paletteAll, setPaletteAll] = useState<InventoryItem[]>([]);
+  const [paletteLoading, setPaletteLoading] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Modal States
@@ -155,7 +165,28 @@ export default function UnifiedPOSHub() {
 
   useEffect(() => {
     loadInitialData();
+    loadPopular();
   }, []);
+
+  // Lazy-load the full catalog the first time the palette opens.
+  useEffect(() => {
+    if (paletteOpen && paletteAll.length === 0) loadPaletteCatalog();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paletteOpen]);
+
+  // Desktop power-user: "/" opens the picker, Esc closes it.
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      const typing = tag === 'INPUT' || tag === 'TEXTAREA';
+      if (e.key === '/' && !typing && !paletteOpen) { e.preventDefault(); openPalette(); }
+      else if (e.key === 'Escape' && paletteOpen) setPaletteOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paletteOpen, paletteAll.length]);
 
   useEffect(() => {
     if (activeTab === 'history') loadHistory();
@@ -186,7 +217,7 @@ export default function UnifiedPOSHub() {
         if (pmRes.data.length > 0) setSelectedPayment(pmRes.data[0].name);
       }
     } catch (err: any) {
-      Alert.alert("Data Error", err.message || "Error tidak diketahui");
+      toast.error(err.message || "Error tidak diketahui");
     }
   };
 
@@ -204,7 +235,7 @@ export default function UnifiedPOSHub() {
     const term = histSearch.trim();
     if (term) q = q.ilike('customer_name', `%${term}%`);
     const { data, error } = await q.limit(histLimit);
-    if (error) Alert.alert("Error", "Gagal memuat riwayat transaksi");
+    if (error) toast.error("Gagal memuat riwayat transaksi");
     if (data) setSales(data as Sale[]);
     setLoading(false);
   };
@@ -263,10 +294,9 @@ export default function UnifiedPOSHub() {
   const checkoutBlocked = loading || !online || !!checkoutBlock;
 
   // --- POS ACTIONS ---
-  const handleSearch = (text: string, rowId: string) => {
-    setRows(prev => prev.map(r => r._id === rowId ? { ...r, query: text } : r));
-    setActiveRowId(rowId);
-
+  // --- CATALOG: one search bar + favorites feed the cart (tap or Enter = add) ---
+  const catalogSearch = (text: string) => {
+    setCatalogQuery(text);
     if (searchTimer.current) clearTimeout(searchTimer.current);
     const q = text.trim();
     if (!q) { setFilteredInv([]); return; }
@@ -283,21 +313,55 @@ export default function UnifiedPOSHub() {
     }, 250);
   };
 
-  const selectItem = (item: InventoryItem, rowId: string) => {
-    const isDuplicate = rows.some(r => r.item?.id === item.id && r._id !== rowId);
-    if (isDuplicate) return Alert.alert("Item Duplikat", "Barang sudah ada di daftar.");
-
+  // Tapping a product adds a line; tapping one already in the cart bumps its qty.
+  const addItemToCart = (item: InventoryItem) => {
     setRows(prev => {
-      const newRows = prev.map(r => r._id === rowId ? { 
-        ...r, item, query: item.item_name, price: item.price.toString(), total: Math.max(0, Math.round(parseNum(r.qty) * item.price - parseNum(r.discount))).toString() 
-      } : r);
-      if (newRows[newRows.length - 1]._id === rowId) {
-        newRows.push(emptyRow());
+      const exists = prev.some(r => r.item?.id === item.id);
+      if (exists) {
+        return prev.map(r => {
+          if (r.item?.id !== item.id) return r;
+          const qty = parseNum(r.qty) + 1;
+          const total = Math.max(0, Math.round(qty * parseNum(r.price) - parseNum(r.discount)));
+          return { ...r, qty: String(qty), total: String(total) };
+        });
       }
-      return newRows;
+      return [...prev, {
+        _id: generateId(), item, query: item.item_name,
+        qty: '1', price: item.price.toString(), discount: '0',
+        total: Math.max(0, Math.round(item.price)).toString(),
+      }];
     });
-    setActiveRowId(null);
-    Keyboard.dismiss();
+  };
+
+  // Favorites = the most-frequently-sold items, shown when the search is empty.
+  const loadPopular = async () => {
+    const { data } = await supabase.from('sale_items').select('inventory_id').order('id', { ascending: false }).limit(300);
+    const tally = new Map<number, number>();
+    (data as { inventory_id: number }[] | null)?.forEach(r => {
+      if (r.inventory_id) tally.set(r.inventory_id, (tally.get(r.inventory_id) || 0) + 1);
+    });
+    const topIds = [...tally.entries()].sort((a, b) => b[1] - a[1]).slice(0, 12).map(([id]) => id);
+    if (topIds.length === 0) {
+      const { data: inv } = await supabase.from('inventory').select('*').order('item_name').limit(12);
+      setPopularItems((inv as InventoryItem[]) || []);
+      return;
+    }
+    const { data: inv } = await supabase.from('inventory').select('*').in('id', topIds);
+    const invMap = new Map((inv as InventoryItem[] || []).map(i => [i.id, i]));
+    setPopularItems(topIds.map(id => invMap.get(id)).filter(Boolean) as InventoryItem[]);
+  };
+
+  // --- COMMAND-PALETTE ITEM PICKER ---
+  const loadPaletteCatalog = async () => {
+    setPaletteLoading(true);
+    const { data } = await supabase.from('inventory').select('id,item_name,quantity,price,allow_preorder,category').order('item_name');
+    setPaletteAll((data as InventoryItem[]) || []);
+    setPaletteLoading(false);
+  };
+
+  const openPalette = () => {
+    setPaletteOpen(true);
+    if (paletteAll.length === 0) loadPaletteCatalog();
   };
 
   const updateRow = (rowId: string, field: 'qty' | 'discount', val: string) => {
@@ -311,7 +375,7 @@ export default function UnifiedPOSHub() {
   };
 
   const removeRow = (rowId: string) => {
-    if (rows.length > 1) setRows(rows.filter(r => r._id !== rowId));
+    setRows(prev => prev.filter(r => r._id !== rowId));
   };
 
   const stepQty = (rowId: string, delta: number) => {
@@ -366,29 +430,29 @@ export default function UnifiedPOSHub() {
       if (error) throw error;
       selectCustomer(data as Customer);
     } catch (e: any) {
-      Alert.alert('Gagal', e.message || 'Tidak dapat menambah pelanggan.');
+      toast.error(e.message || 'Tidak dapat menambah pelanggan.');
     }
   };
 
   // --- CORE TRANSACTIONS ---
   const validateSale = (validRows: SaleRow[]) => {
     if (validRows.length === 0) {
-      Alert.alert("Kosong", "Pilih barang terlebih dahulu.");
+      toast.error("Pilih barang terlebih dahulu.");
       return false;
     }
     const outOfStock = validRows.filter(r => !r.item?.allow_preorder && parseNum(r.qty) > (r.item?.quantity || 0));
     if (outOfStock.length > 0) {
       const names = outOfStock.map(r => `- ${r.item?.item_name} (Stok: ${r.item?.quantity})`).join('\n');
-      Alert.alert("Stok Tidak Cukup", `Barang berikut melebihi stok:\n${names}`);
+      toast.error("Stok tidak cukup", `Barang berikut melebihi stok:\n${names}`);
       return false;
     }
     if (isCash && cashReceived < currentTotal) {
-      Alert.alert("Uang Kurang", `Pembayaran tunai minimal ${formatRupiah(currentTotal)}`);
+      toast.error(`Pembayaran tunai minimal ${formatRupiah(currentTotal)}`);
       return false;
     }
     if (isTempo && !selectedCustomerId) {
-      Alert.alert(
-        "Pelanggan Wajib",
+      toast.error(
+        "Pelanggan wajib",
         "Pilih atau buat pelanggan untuk transaksi Tempo, agar hutangnya tercatat di Buku Piutang."
       );
       return false;
@@ -434,14 +498,16 @@ export default function UnifiedPOSHub() {
       resetPOS();
       loadInitialData();
     } catch (e: any) {
-      Alert.alert("Transaksi Gagal", e.message);
+      toast.error(e.message);
     } finally {
       setLoading(false);
     }
   };
 
   const resetPOS = () => {
-    setRows([emptyRow()]);
+    setRows([]);
+    setCatalogQuery('');
+    setFilteredInv([]);
     setCustomerName('Umum');
     setSelectedCustomerId(null);
     setCustomerResults([]);
@@ -457,7 +523,7 @@ export default function UnifiedPOSHub() {
     setLoading(true);
     const { data: items, error } = await supabase.from('sale_items').select('*').eq('sale_id', sale.id);
     if (error) {
-      Alert.alert("Error", "Gagal memuat detail item.");
+      toast.error("Gagal memuat detail item.");
       setLoading(false);
       return;
     }
@@ -488,8 +554,6 @@ export default function UnifiedPOSHub() {
         total: Math.max(0, it.quantity * it.price_at_sale - disc).toString()
       };
     });
-    mappedRows.push(emptyRow());
-    
     setRows(mappedRows);
     setEditModal(true);
     setLoading(false);
@@ -527,13 +591,13 @@ export default function UnifiedPOSHub() {
       });
       if (error) throw error;
 
-      Alert.alert("Berhasil", "Transaksi telah diperbarui.");
+      toast.success("Transaksi telah diperbarui.");
       setEditModal(false);
       resetPOS();
       loadHistory();
       loadInitialData();
     } catch (e: any) {
-      Alert.alert("Gagal Update", e.message);
+      toast.error(e.message);
     } finally {
       setLoading(false);
     }
@@ -557,7 +621,7 @@ export default function UnifiedPOSHub() {
               loadHistory();
               loadInitialData();
             } catch (e: any) {
-              Alert.alert("Error", e.message);
+              toast.error(e.message);
             } finally {
               setLoading(false);
             }
@@ -581,7 +645,7 @@ export default function UnifiedPOSHub() {
       config,
     });
     if (!result.ok) {
-      Alert.alert('Cetak Gagal', 'Tidak ada metode cetak yang tersedia. Periksa pengaturan printer di Setup.');
+      toast.error('Tidak ada metode cetak yang tersedia. Periksa pengaturan printer di Setup.');
     }
   };
 
@@ -617,37 +681,11 @@ export default function UnifiedPOSHub() {
   };
 
   // --- SUB-COMPONENTS ---
-  const renderSuggestItem = (item: InventoryItem, rowId: string) => (
-    <TouchableOpacity key={item.id} style={styles.suggestItem} onPress={() => selectItem(item, rowId)}>
+  const renderSuggestItem = (item: InventoryItem) => (
+    <TouchableOpacity key={item.id} style={styles.suggestItem} onPress={() => addItemToCart(item)}>
       <Text style={{ fontWeight: 'bold', color: '#0F172A' }}>{item.item_name}</Text>
       <Text style={[styles.mono, { fontSize: 11, color: '#64748B' }]}>{formatRupiah(item.price)} • Stok: {item.quantity}{item.allow_preorder ? ' • Pre-order' : ''}</Text>
     </TouchableOpacity>
-  );
-
-  // inline (mobile) lists results in-flow below the input; desktop overlays them.
-  const renderSearchCell = (row: SaleRow, inline?: boolean) => (
-    <View style={{ position: 'relative', zIndex: 5 }}>
-      <TextInput
-        style={styles.cellInput}
-        placeholder="Cari item..."
-        value={row.query}
-        onChangeText={t => handleSearch(t, row._id)}
-        onFocus={() => setActiveRowId(row._id)}
-      />
-      {activeRowId === row._id && filteredInv.length > 0 && (
-        inline ? (
-          <View style={styles.suggestInline}>
-            {filteredInv.slice(0, 8).map(item => renderSuggestItem(item, row._id))}
-          </View>
-        ) : (
-          <View style={styles.suggestBox}>
-            <ScrollView keyboardShouldPersistTaps="handled" nestedScrollEnabled style={{ maxHeight: 200 }}>
-              {filteredInv.map(item => renderSuggestItem(item, row._id))}
-            </ScrollView>
-          </View>
-        )
-      )}
-    </View>
   );
 
   const renderStepper = (row: SaleRow, extra?: ViewStyle) => (
@@ -666,7 +704,19 @@ export default function UnifiedPOSHub() {
     <View style={styles.card}>
       <Text style={styles.sectionTitle}>DETAIL PESANAN</Text>
 
-      {isDesktop ? (
+      {/* Opens the command-palette item picker (or press "/" on desktop) */}
+      <TouchableOpacity style={styles.paletteTrigger} onPress={openPalette} activeOpacity={0.8}>
+        <Ionicons name="search" size={18} color="#94A3B8" />
+        <Text style={styles.paletteTriggerText}>Cari atau pilih barang...</Text>
+        {isDesktop && <View style={styles.kbdHint}><Text style={styles.kbdText}>/</Text></View>}
+      </TouchableOpacity>
+
+      {rows.length === 0 ? (
+        <View style={styles.cartEmpty}>
+          <Ionicons name="cart-outline" size={36} color="#CBD5E1" />
+          <Text style={styles.cartEmptyText}>Belum ada barang. Cari di atas.</Text>
+        </View>
+      ) : isDesktop ? (
         <>
           <View style={styles.tableHead}>
             <Text style={[styles.th, { flex: 2.4 }]}>BARANG</Text>
@@ -678,8 +728,10 @@ export default function UnifiedPOSHub() {
             <View style={{ width: 30 }} />
           </View>
           {rows.map((row) => (
-            <View key={row._id} style={[styles.tableRow, { zIndex: activeRowId === row._id ? 100 : 1 }]}>
-              <View style={{ flex: 2.4 }}>{renderSearchCell(row)}</View>
+            <View key={row._id} style={styles.tableRow}>
+              <View style={{ flex: 2.4, paddingRight: 8 }}>
+                <Text style={styles.cartItemName} numberOfLines={2}>{row.item?.item_name}</Text>
+              </View>
               <Text style={[styles.mono, styles.cellText, { flex: 0.7 }]}>{row.item?.quantity ?? '-'}</Text>
               {renderStepper(row, { flex: 1.6 })}
               <Text style={[styles.mono, styles.cellPrice, { flex: 1.2 }]}>{formatRupiah(parseNum(row.price))}</Text>
@@ -693,8 +745,13 @@ export default function UnifiedPOSHub() {
         </>
       ) : (
         rows.map((row) => (
-          <View key={row._id} style={[styles.mItemCard, { zIndex: activeRowId === row._id ? 100 : 1 }]}>
-            {renderSearchCell(row, true)}
+          <View key={row._id} style={styles.mItemCard}>
+            <View style={styles.mItemHead}>
+              <Text style={styles.mItemName} numberOfLines={2}>{row.item?.item_name}</Text>
+              <TouchableOpacity onPress={() => removeRow(row._id)}>
+                <Ionicons name="trash-outline" size={20} color="#DC2626" />
+              </TouchableOpacity>
+            </View>
             <View style={styles.mRow}>
               <Text style={styles.mRowLabel}>QTY</Text>
               {renderStepper(row, styles.mStepper)}
@@ -709,12 +766,7 @@ export default function UnifiedPOSHub() {
             </View>
             <View style={styles.mItemFooter}>
               <Text style={styles.mStock}>Stok: {row.item?.quantity ?? '-'}{row.item?.allow_preorder ? ' • Pre-order' : ''}</Text>
-              <View style={styles.mFooterRight}>
-                <Text style={[styles.mono, styles.mTotal]}>{formatRupiah(parseNum(row.total))}</Text>
-                <TouchableOpacity onPress={() => removeRow(row._id)} style={styles.mTrash}>
-                  <Ionicons name="trash-outline" size={20} color="#DC2626" />
-                </TouchableOpacity>
-              </View>
+              <Text style={[styles.mono, styles.mTotal]}>{formatRupiah(parseNum(row.total))}</Text>
             </View>
           </View>
         ))
@@ -1016,6 +1068,33 @@ export default function UnifiedPOSHub() {
         </View>
       </Modal>
 
+      <CommandPalette<InventoryItem>
+        visible={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        items={paletteAll}
+        loading={paletteLoading}
+        isDesktop={isDesktop}
+        placeholder="Cari barang..."
+        emptyText="Tidak ada barang."
+        keyExtractor={(i) => i.id}
+        getLabel={(i) => i.item_name}
+        getSubtitle={(i) => `${formatRupiah(i.price)} • Stok: ${i.quantity}${i.allow_preorder ? ' • PO' : ''}`}
+        getGroup={(i) => i.category || 'Lainnya'}
+        favorites={popularItems}
+        favoritesTitle="Sering Dijual"
+        isSelected={(i) => rows.some(r => r.item?.id === i.id)}
+        onSelect={addItemToCart}
+        keepOpenOnSelect
+        footer={
+          <>
+            <Text style={{ fontSize: 12, color: '#64748B', fontWeight: '600' }}>{rows.length} barang di keranjang</Text>
+            <TouchableOpacity onPress={() => setPaletteOpen(false)} style={{ backgroundColor: '#0F172A', borderRadius: 10, paddingHorizontal: 18, paddingVertical: 10 }}>
+              <Text style={{ color: '#FFF', fontWeight: '800', fontSize: 12, letterSpacing: 0.5 }}>SELESAI</Text>
+            </TouchableOpacity>
+          </>
+        }
+      />
+
       <Modal visible={printModal} transparent animationType="fade">
         <View style={styles.overlay}><View style={styles.modalCard}>
           <Ionicons name="checkmark-circle" size={64} color="#16A34A" />
@@ -1128,6 +1207,45 @@ const styles = StyleSheet.create({
   mTrash: { width: 42, height: 40, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FEF2F2', borderRadius: 8 },
   suggestBox: { position: 'absolute', top: 42, left: 0, right: 0, backgroundColor: '#FFF', borderRadius: 8, elevation: 10, zIndex: 1000, borderWidth: 1, borderColor: '#E2E8F0' },
   suggestItem: { padding: 12, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  paletteTrigger: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#F8FAFC', borderRadius: 12, paddingHorizontal: 14, height: 48, borderWidth: 1, borderColor: '#E2E8F0', marginBottom: 14 },
+  paletteTriggerText: { flex: 1, fontSize: 14, color: '#94A3B8', fontWeight: '600' },
+  kbdHint: { borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2, backgroundColor: '#FFF' },
+  kbdText: { fontSize: 12, fontWeight: '800', color: '#64748B' },
+  palOverlay: { flex: 1, backgroundColor: 'rgba(15,23,42,0.55)', alignItems: 'center', paddingTop: 70, paddingHorizontal: 16 },
+  palCard: { width: '100%', maxHeight: '85%', backgroundColor: '#FFF', borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#E2E8F0', elevation: 12, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 24, shadowOffset: { width: 0, height: 12 } },
+  palSearchRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, height: 56, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  palSearchInput: { flex: 1, fontSize: 16, color: '#0F172A', outlineStyle: 'none' as any },
+  palClose: { borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, backgroundColor: '#F8FAFC' },
+  palCloseText: { fontSize: 11, fontWeight: '800', color: '#94A3B8' },
+  palCatRow: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F1F5F9', flexGrow: 0 },
+  palChip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 18, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#E2E8F0' },
+  palChipActive: { backgroundColor: '#DC2626', borderColor: '#DC2626' },
+  palChipText: { fontSize: 12, fontWeight: '700', color: '#64748B' },
+  palChipTextActive: { color: '#FFF' },
+  palSectionTitle: { fontSize: 10, fontWeight: '800', color: '#94A3B8', letterSpacing: 0.5, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 6 },
+  palItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 10 },
+  palItemIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center' },
+  palItemName: { fontSize: 14, fontWeight: '700', color: '#0F172A' },
+  palItemMeta: { fontSize: 11, color: '#64748B', marginTop: 2 },
+  palEmpty: { textAlign: 'center', color: '#94A3B8', fontWeight: '600', paddingVertical: 40 },
+  palFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, borderTopColor: '#F1F5F9', backgroundColor: '#F8FAFC' },
+  palFooterText: { fontSize: 12, color: '#64748B', fontWeight: '600' },
+  palDone: { backgroundColor: '#0F172A', borderRadius: 10, paddingHorizontal: 18, paddingVertical: 10 },
+  palDoneText: { color: '#FFF', fontWeight: '800', fontSize: 12, letterSpacing: 0.5 },
+  catalogBar: { marginBottom: 14, position: 'relative', zIndex: 50 },
+  catalogSearch: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#F8FAFC', borderRadius: 12, paddingHorizontal: 14, height: 46, borderWidth: 1, borderColor: '#E2E8F0' },
+  catalogInput: { flex: 1, fontSize: 14, color: '#0F172A', outlineStyle: 'none' as any },
+  favRow: { flexDirection: 'row', gap: 8, paddingRight: 4 },
+  favChip: { backgroundColor: '#FFF', borderRadius: 12, borderWidth: 1, borderColor: '#FEE2E2', paddingHorizontal: 12, paddingVertical: 8, maxWidth: 170 },
+  favName: { fontSize: 12, fontWeight: '800', color: '#0F172A' },
+  favPrice: { fontSize: 11, color: '#DC2626', fontWeight: '700', marginTop: 2 },
+  catalogResults: { position: 'absolute', top: 52, left: 0, right: 0, backgroundColor: '#FFF', borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0', zIndex: 50, elevation: 8, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 12, shadowOffset: { width: 0, height: 4 } },
+  catalogEmpty: { padding: 16, textAlign: 'center', color: '#94A3B8', fontWeight: '600' },
+  cartItemName: { fontSize: 14, fontWeight: '700', color: '#0F172A' },
+  cartEmpty: { alignItems: 'center', paddingVertical: 40, gap: 10 },
+  cartEmptyText: { color: '#94A3B8', fontWeight: '600', fontSize: 13, textAlign: 'center' },
+  mItemHead: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 8 },
+  mItemName: { flex: 1, fontSize: 15, fontWeight: '800', color: '#0F172A' },
   custSuggestBox: { position: 'absolute', top: 62, left: 0, right: 0, backgroundColor: '#FFF', borderRadius: 8, elevation: 10, zIndex: 1000, borderWidth: 1, borderColor: '#E2E8F0' },
   custLinkedHint: { fontSize: 10, color: '#16A34A', fontWeight: '700', marginTop: 4 },
   offlineHint: { fontSize: 11, color: '#B45309', marginTop: 10, fontWeight: '600', textAlign: 'center' },

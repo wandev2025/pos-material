@@ -2,7 +2,7 @@ import { Feather } from '@expo/vector-icons';
 import * as Print from 'expo-print';
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator, Alert,
+  ActivityIndicator,
   FlatList,
   KeyboardAvoidingView,
   Modal,
@@ -21,6 +21,7 @@ import { useOnline } from '../../lib/offline/OfflineContext';
 import { printHtmlViaIframe } from '../../lib/printing';
 import { useProfile } from '../../lib/ProfileContext';
 import { supabase } from '../../lib/supabase';
+import { toast } from '../../lib/toast';
 
 // --- TYPES ---
 interface Customer {
@@ -194,7 +195,7 @@ export default function PelangganScreen() {
   };
 
   const handleSaveCustomer = async () => {
-    if (!formName.trim()) return Alert.alert('Validasi', 'Nama pelanggan wajib diisi.');
+    if (!formName.trim()) return toast.error('Nama pelanggan wajib diisi.');
     setSaving(true);
     const payload = {
       name: formName.trim(),
@@ -208,7 +209,7 @@ export default function PelangganScreen() {
       ({ error } = await supabase.from('customers').insert([payload]));
     }
     setSaving(false);
-    if (error) return Alert.alert('Gagal', error.message);
+    if (error) return toast.error(error.message);
     setCustomerModal(false);
     load();
   };
@@ -225,8 +226,8 @@ export default function PelangganScreen() {
   const handleRecordPayment = async () => {
     if (!selectedCustomer) return;
     const amount = Math.round(parseNum(payAmountStr));
-    if (amount <= 0) return Alert.alert('Validasi', 'Nominal pembayaran harus lebih dari 0.');
-    if (!payMethod) return Alert.alert('Validasi', 'Pilih metode pembayaran.');
+    if (amount <= 0) return toast.error('Nominal pembayaran harus lebih dari 0.');
+    if (!payMethod) return toast.error('Pilih metode pembayaran.');
 
     setSaving(true);
     const p_payment = {
@@ -239,7 +240,7 @@ export default function PelangganScreen() {
     };
     const { error } = await supabase.rpc('record_customer_payment', { p_payment });
     setSaving(false);
-    if (error) return Alert.alert('Gagal', error.message);
+    if (error) return toast.error(error.message);
     setPayModal(false);
     load();
   };

@@ -1,7 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Alert,
+  ActivityIndicator,
   Modal,
   ScrollView,
   StyleSheet,
@@ -16,6 +16,7 @@ import { parseNum } from '../../lib/number';
 import { useOnline } from '../../lib/offline/OfflineContext';
 import { useProfile } from '../../lib/ProfileContext';
 import { supabase } from '../../lib/supabase';
+import { toast } from '../../lib/toast';
 
 // --- HELPERS ---
 const generateId = () => Math.random().toString(36).substring(2, 12);
@@ -139,7 +140,7 @@ export default function PembelianScreen() {
 
   const selectInvItem = (item: InventoryItem, rowId: string) => {
     const duplicate = rows.some(r => r.item?.id === item.id && r._id !== rowId);
-    if (duplicate) return Alert.alert('Item Duplikat', 'Barang sudah ada di daftar.');
+    if (duplicate) return toast.error('Barang sudah ada di daftar.');
     setRows(prev => {
       const next = prev.map(r => {
         if (r._id !== rowId) return r;
@@ -169,8 +170,8 @@ export default function PembelianScreen() {
 
   const handleCreateItem = async () => {
     if (!newItemFor) return;
-    if (!niName.trim()) return Alert.alert('Validasi', 'Nama barang wajib diisi.');
-    if (!niUnit) return Alert.alert('Validasi', 'Pilih satuan barang.');
+    if (!niName.trim()) return toast.error('Nama barang wajib diisi.');
+    if (!niUnit) return toast.error('Pilih satuan barang.');
     setSaving(true);
     const { data, error } = await supabase.from('inventory').insert([{
       item_name: niName.trim(),
@@ -181,7 +182,7 @@ export default function PembelianScreen() {
       allow_preorder: false,
     }]).select('id, item_name, quantity, price, cost').single();
     setSaving(false);
-    if (error) return Alert.alert('Gagal', error.message);
+    if (error) return toast.error(error.message);
     const rowId = newItemFor;
     setNewItemFor(null);
     selectInvItem(data as InventoryItem, rowId); // attaches to the row + appends a fresh one
@@ -222,8 +223,8 @@ export default function PembelianScreen() {
   const handleSubmit = async () => {
     if (!online) return;
     const validRows = rows.filter(r => r.item && parseNum(r.qty) > 0);
-    if (validRows.length === 0) return Alert.alert('Kosong', 'Pilih minimal satu barang yang diterima.');
-    if (!supplierQuery.trim()) return Alert.alert('Validasi', 'Nama supplier wajib diisi.');
+    if (validRows.length === 0) return toast.error('Pilih minimal satu barang yang diterima.');
+    if (!supplierQuery.trim()) return toast.error('Nama supplier wajib diisi.');
 
     setSaving(true);
     try {
@@ -264,9 +265,9 @@ export default function PembelianScreen() {
 
       resetForm();
       loadData();
-      Alert.alert('Sukses', 'Stok masuk berhasil dicatat.');
+      toast.success('Stok masuk berhasil dicatat.');
     } catch (e: any) {
-      Alert.alert('Gagal', e.message || 'Terjadi kesalahan.');
+      toast.error(e.message || 'Terjadi kesalahan.');
     } finally {
       setSaving(false);
     }

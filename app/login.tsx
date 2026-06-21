@@ -1,7 +1,6 @@
 import { useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -18,6 +17,7 @@ import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { supabase } from '../lib/supabase';
+import { toast } from '../lib/toast';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -47,11 +47,7 @@ export default function LoginScreen() {
       });
 
       if (error) {
-        if (Platform.OS === 'web') {
-          window.alert("Gagal Login: " + error.message);
-        } else {
-          Alert.alert('Gagal Login', error.message);
-        }
+        toast.error('Gagal Login', error.message);
         setLoading(false);
         return;
       }
@@ -62,7 +58,7 @@ export default function LoginScreen() {
       }
     } catch (err) {
       setLoading(false);
-      Alert.alert('Error', 'Terjadi kesalahan sistem.');
+      toast.error('Terjadi kesalahan sistem.');
     } finally {
       // We don't set loading false here because the page will redirect
     }
