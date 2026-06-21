@@ -167,7 +167,9 @@ export default function PelangganScreen() {
 
   const outstandingMap = useMemo(() => {
     const m = new Map<number, number>();
-    ledgers.forEach((l, id) => m.set(id, l.net));
+    ledgers.forEach((l, id) => {
+      m.set(id, l.net);
+    });
     return m;
   }, [ledgers]);
 
@@ -210,7 +212,7 @@ export default function PelangganScreen() {
       phone: formPhone.trim() || null,
       address: formAddress.trim() || null,
     };
-    let error;
+    let error: { message: string } | null = null;
     if (editingCustomer) {
       ({ error } = await supabase.from('customers').update(payload).eq('id', editingCustomer.id));
     } else {

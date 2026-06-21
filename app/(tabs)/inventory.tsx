@@ -142,7 +142,7 @@ export default function InventoryScreen() {
       category: formCategory.trim() || null,
     };
 
-    let error;
+    let error: { message: string } | null = null;
     if (selectedItem) {
       const { error: err } = await supabase.from('inventory').update(payload).eq('id', selectedItem.id);
       error = err;
@@ -277,7 +277,7 @@ export default function InventoryScreen() {
       return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
     const lines = [['Nama', 'Stok', 'Satuan', 'Harga', 'Nilai', 'Batas Minim', 'Supplier'].join(',')];
-    inventory.forEach(i =>
+    inventory.forEach(i => {
       lines.push(
         [
           esc(i.item_name),
@@ -288,8 +288,8 @@ export default function InventoryScreen() {
           i.min_stock,
           esc(i.last_supplier_name || ''),
         ].join(',')
-      )
-    );
+      );
+    });
     const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

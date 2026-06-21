@@ -94,7 +94,9 @@ export default function CommandPalette<T>({
   const groups = useMemo(() => {
     if (!getGroup) return [] as string[];
     const s = new Set<string>();
-    items.forEach(i => s.add(getGroup(i)));
+    items.forEach(i => {
+      s.add(getGroup(i));
+    });
     return ['all', ...[...s].sort((a, b) => a.localeCompare(b))];
   }, [items, getGroup]);
 
@@ -111,7 +113,11 @@ export default function CommandPalette<T>({
         if (!byG.has(g)) byG.set(g, []);
         byG.get(g)!.push(i);
       });
-      [...byG.keys()].sort((a, b) => a.localeCompare(b)).forEach(g => secs.push({ title: g, items: byG.get(g)! }));
+      [...byG.keys()]
+        .sort((a, b) => a.localeCompare(b))
+        .forEach(g => {
+          secs.push({ title: g, items: byG.get(g)! });
+        });
     } else {
       secs.push({ title: '', items });
     }

@@ -21,7 +21,10 @@ let items: ToastItem[] = [];
 const listeners = new Set<Listener>();
 let counter = 0;
 
-const emit = () => listeners.forEach(l => l([...items]));
+const emit = () =>
+  listeners.forEach(l => {
+    l([...items]);
+  });
 
 const dismiss = (id: number) => {
   items = items.filter(t => t.id !== id);

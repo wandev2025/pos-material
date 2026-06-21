@@ -52,7 +52,8 @@
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
-    "lint:expo": "expo lint"
+    "lint:expo": "expo lint",
+    "prepare": "git config core.hooksPath .githooks || true"
   },
   "private": true,
   "overrides": {
