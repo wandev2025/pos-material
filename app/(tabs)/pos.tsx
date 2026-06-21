@@ -17,7 +17,7 @@ import { supabase } from '../../lib/supabase';
 interface Profile {
   id: string;
   full_name: string;
-  role: 'OWNER' | 'ADMIN' | 'STAFF'; // Updated to match your system roles
+  role: 'SUPERADMIN' | 'OWNER' | 'ADMIN' | 'STAFF'; // Updated to match your system roles
 }
 
 interface InventoryItem {
@@ -25,6 +25,7 @@ interface InventoryItem {
   item_name: string;
   quantity: number;
   price: number;
+  allow_preorder?: boolean;
 }
 
 interface PaymentMethod {
@@ -71,11 +72,6 @@ interface PrintSettings {
   do_footer: string;
 }
 
-interface InventoryDelta {
-  inventory_id: number;
-  delta: number;
-}
-
 // --- PURE HELPERS ---
 const formatRupiah = (n: number) => 
   new Intl.NumberFormat('id-ID', { 
@@ -85,20 +81,6 @@ const formatRupiah = (n: number) =>
   }).format(Math.round(n) || 0);
 
 const generateId = () => Math.random().toString(36).substring(2, 15);
-
-const getInventoryDelta = (oldItems: SaleItem[], newItems: SaleItem[]): InventoryDelta[] => {
-  const map = new Map<number, number>();
-  oldItems.forEach(item => {
-    map.set(item.inventory_id, (map.get(item.inventory_id) || 0) + item.quantity);
-  });
-  newItems.forEach(item => {
-    map.set(item.inventory_id, (map.get(item.inventory_id) || 0) - item.quantity);
-  });
-  return Array.from(map.entries()).map(([inventory_id, delta]) => ({
-    inventory_id,
-    delta
-  }));
-};
 
 const MONO_STACK = Platform.select({
   ios: 'Courier New',
@@ -231,7 +213,7 @@ export default function UnifiedPOSHub() {
       Alert.alert("Kosong", "Pilih barang terlebih dahulu.");
       return false;
     }
-    const outOfStock = validRows.filter(r => parseNum(r.qty) > (r.item?.quantity || 0));
+    const outOfStock = validRows.filter(r => !r.item?.allow_preorder && parseNum(r.qty) > (r.item?.quantity || 0));
     if (outOfStock.length > 0) {
       const names = outOfStock.map(r => `- ${r.item?.item_name} (Stok: ${r.item?.quantity})`).join('\n');
       Alert.alert("Stok Tidak Cukup", `Barang berikut melebihi stok:\n${names}`);
@@ -263,26 +245,22 @@ export default function UnifiedPOSHub() {
         employee_name: profile?.full_name || 'Staff'
       };
 
-      const { data: sale, error: saleErr } = await supabase.from('sales').insert([salePayload]).select().single();
-      if (saleErr) throw saleErr;
-
-      const itemsToSave: SaleItem[] = validRows.map(r => ({
-        sale_id: sale.id,
+      const itemsToSave = validRows.map(r => ({
         inventory_id: r.item!.id,
         item_name: r.item!.item_name,
         quantity: parseNum(r.qty),
         price_at_sale: Math.round(parseNum(r.price))
       }));
 
-      const { error: itemsErr } = await supabase.from('sale_items').insert(itemsToSave);
-      if (itemsErr) throw new Error("Gagal menyimpan detail item.");
-
-      await Promise.all(validRows.map(r => 
-        supabase.from('inventory').update({ quantity: (r.item?.quantity || 0) - parseNum(r.qty) }).eq('id', r.item!.id)
-      ));
+      // Atomic: inserts the sale + items and decrements stock in one transaction.
+      const { data: sale, error } = await supabase.rpc('create_sale', {
+        p_sale: salePayload,
+        p_items: itemsToSave
+      });
+      if (error) throw error;
 
       setLastSale(sale as Sale);
-      setLastSaleItems(itemsToSave);
+      setLastSaleItems(itemsToSave.map(it => ({ ...it, sale_id: (sale as Sale).id })));
       setPrintModal(true);
       resetPOS();
       loadInitialData();
@@ -339,37 +317,28 @@ export default function UnifiedPOSHub() {
     
     setLoading(true);
     try {
-      const { data: oldItems } = await supabase.from('sale_items').select('*').eq('sale_id', editingSale.id);
-      const newItems: SaleItem[] = validRows.map(r => ({
-        sale_id: editingSale.id,
+      const salePayload = {
+        total_amount: currentTotal,
+        payment_method: selectedPayment,
+        customer_name: customerName,
+        status: isTempo ? (remainingBalance === 0 ? 'PAID' : 'PARTIAL') : 'PAID',
+        down_payment: isTempo ? downPayment : currentTotal
+      };
+
+      const newItems = validRows.map(r => ({
         inventory_id: r.item!.id,
         item_name: r.item!.item_name,
         quantity: parseNum(r.qty),
         price_at_sale: Math.round(parseNum(r.price))
       }));
 
-      const deltas = getInventoryDelta(oldItems as SaleItem[], newItems);
-      const updatedStatus = isTempo ? (remainingBalance === 0 ? 'PAID' : 'PARTIAL') : 'PAID';
-      
-      const { error: saleErr } = await supabase.from('sales').update({
-        total_amount: currentTotal,
-        payment_method: selectedPayment,
-        customer_name: customerName,
-        status: updatedStatus,
-        down_payment: isTempo ? downPayment : currentTotal
-      }).eq('id', editingSale.id);
-      if (saleErr) throw saleErr;
-
-      await supabase.from('sale_items').delete().eq('sale_id', editingSale.id);
-      await supabase.from('sale_items').insert(newItems);
-
-      // Using standard update for stock (assuming low volume as per prompt instructions)
-      await Promise.all(deltas.map(async d => {
-        const inv = inventory.find(i => i.id === d.inventory_id);
-        if (inv) {
-          await supabase.from('inventory').update({ quantity: inv.quantity + d.delta }).eq('id', d.inventory_id);
-        }
-      }));
+      // Atomic: restores old stock, swaps items, re-decrements — single transaction.
+      const { error } = await supabase.rpc('update_sale', {
+        p_sale_id: editingSale.id,
+        p_sale: salePayload,
+        p_items: newItems
+      });
+      if (error) throw error;
 
       Alert.alert("Berhasil", "Transaksi telah diperbarui.");
       setEditModal(false);
@@ -395,17 +364,9 @@ export default function UnifiedPOSHub() {
           onPress: async () => {
             setLoading(true);
             try {
-              const { data: items } = await supabase.from('sale_items').select('*').eq('sale_id', sale.id);
-              if (items) {
-                await Promise.all((items as SaleItem[]).map(async it => {
-                  const inv = inventory.find(i => i.id === it.inventory_id);
-                  if (inv) {
-                    await supabase.from('inventory').update({ quantity: inv.quantity + it.quantity }).eq('id', it.inventory_id);
-                  }
-                }));
-              }
-              await supabase.from('sale_items').delete().eq('sale_id', sale.id);
-              await supabase.from('sales').delete().eq('id', sale.id);
+              // Atomic: restocks the items and removes the sale in one transaction.
+              const { error } = await supabase.rpc('delete_sale', { p_sale_id: sale.id });
+              if (error) throw error;
               loadHistory();
               loadInitialData();
             } catch (e: any) {
@@ -586,7 +547,7 @@ export default function UnifiedPOSHub() {
                 <View style={{ alignItems: 'flex-end' }}>
                   <Text style={[styles.mono, styles.hPrice]}>{formatRupiah(item.total_amount)}</Text>
                   <View style={styles.hActions}>
-                    {(profile?.role === 'OWNER' || profile?.role === 'ADMIN') && (
+                    {profile?.role !== 'STAFF' && (
                       <>
                         <TouchableOpacity style={styles.iconBtn} onPress={() => handleEditSale(item)}>
                           <Ionicons name="create-outline" size={18} color="#0F172A" />
