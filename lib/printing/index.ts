@@ -91,3 +91,6 @@ export { pairWebUsb } from './transports/webusb';
 export { pairWebSerial } from './transports/webserial';
 // Exposed for print previews — exactly the HTML that DIALOG/KIOSK/AGENT print.
 export { generatePrintHtml } from '../printTemplates';
+// Robust hidden-iframe printer (reused by screens that print custom HTML, e.g.
+// the customer statement) — never popup-blocked, silent under --kiosk-printing.
+export { printHtmlViaIframe } from './transports/iframePrint';

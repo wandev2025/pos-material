@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { DeliveryOrderPreview, InvoicePreview, ThermalPreview } from '../../components/PrintPreviews';
 import { parseNum } from '../../lib/number';
+import { useOnline } from '../../lib/offline/OfflineContext';
 import type { DocType, PrintConfig } from '../../lib/printing';
 import { DEFAULT_PRINT_CONFIG, generatePrintHtml, printDocument } from '../../lib/printing';
 import { useProfile } from '../../lib/ProfileContext';
@@ -33,6 +34,13 @@ interface PaymentMethod {
   name: string;
 }
 
+interface Customer {
+  id: number;
+  name: string;
+  phone?: string | null;
+  address?: string | null;
+}
+
 interface SaleRow {
   _id: string;
   item: InventoryItem | null;
@@ -48,6 +56,7 @@ interface Sale {
   total_amount: number;
   payment_method: string;
   customer_name: string;
+  customer_id?: number | null;
   status: 'PAID' | 'PARTIAL' | 'UNPAID';
   down_payment: number;
   discount?: number;
@@ -100,6 +109,7 @@ export default function UnifiedPOSHub() {
   const profile = rawProfile as unknown as Profile;
   const { width } = useWindowDimensions();
   const isDesktop = width > 1100;
+  const online = useOnline();
 
   // --- STATE ---
   const [activeTab, setActiveTab] = useState<'input' | 'history'>('input');
@@ -110,6 +120,10 @@ export default function UnifiedPOSHub() {
 
   // POS Input
   const [customerName, setCustomerName] = useState('Umum');
+  const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
+  const [customerResults, setCustomerResults] = useState<Customer[]>([]);
+  const [showCustomerSuggest, setShowCustomerSuggest] = useState(false);
+  const customerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [selectedPayment, setSelectedPayment] = useState('');
   const [cashReceivedStr, setCashReceivedStr] = useState('');
   const [downPaymentStr, setDownPaymentStr] = useState('');
@@ -235,6 +249,56 @@ export default function UnifiedPOSHub() {
     updateRow(rowId, 'qty', String(next));
   };
 
+  // --- CUSTOMER PICKER (links a sale to a customer for the piutang ledger) ---
+  const handleCustomerSearch = (text: string) => {
+    setCustomerName(text);
+    // Editing the name detaches any prior link until a row is re-picked.
+    setSelectedCustomerId(null);
+    setShowCustomerSuggest(true);
+
+    if (customerTimer.current) clearTimeout(customerTimer.current);
+    const q = text.trim();
+    if (!q || q.toLowerCase() === 'umum') { setCustomerResults([]); return; }
+
+    // Server-side search keeps a large customer base fast (only matches fetched).
+    customerTimer.current = setTimeout(async () => {
+      const { data } = await supabase
+        .from('customers')
+        .select('*')
+        .ilike('name', `%${q}%`)
+        .order('name')
+        .limit(8);
+      setCustomerResults((data as Customer[]) || []);
+    }, 250);
+  };
+
+  const selectCustomer = (c: Customer) => {
+    setSelectedCustomerId(c.id);
+    setCustomerName(c.name);
+    setCustomerResults([]);
+    setShowCustomerSuggest(false);
+  };
+
+  const selectUmum = () => {
+    setSelectedCustomerId(null);
+    setCustomerName('Umum');
+    setCustomerResults([]);
+    setShowCustomerSuggest(false);
+  };
+
+  // Quick-create: persist a new customer by name so this sale can join the ledger.
+  const quickCreateCustomer = async () => {
+    const name = customerName.trim();
+    if (!name || name.toLowerCase() === 'umum') return;
+    try {
+      const { data, error } = await supabase.from('customers').insert([{ name }]).select().single();
+      if (error) throw error;
+      selectCustomer(data as Customer);
+    } catch (e: any) {
+      Alert.alert('Gagal', e.message || 'Tidak dapat menambah pelanggan.');
+    }
+  };
+
   // --- CORE TRANSACTIONS ---
   const validateSale = (validRows: SaleRow[]) => {
     if (validRows.length === 0) {
@@ -251,8 +315,11 @@ export default function UnifiedPOSHub() {
       Alert.alert("Uang Kurang", `Pembayaran tunai minimal ${formatRupiah(currentTotal)}`);
       return false;
     }
-    if (isTempo && (!customerName || customerName === 'Umum')) {
-      Alert.alert("Validasi", "Nama pelanggan wajib diisi untuk transaksi Tempo.");
+    if (isTempo && !selectedCustomerId) {
+      Alert.alert(
+        "Pelanggan Wajib",
+        "Pilih atau buat pelanggan untuk transaksi Tempo, agar hutangnya tercatat di Buku Piutang."
+      );
       return false;
     }
     return true;
@@ -268,6 +335,7 @@ export default function UnifiedPOSHub() {
         total_amount: currentTotal,
         payment_method: selectedPayment,
         customer_name: customerName,
+        customer_id: selectedCustomerId,
         status: isTempo ? (remainingBalance === 0 ? 'PAID' : 'PARTIAL') : 'PAID',
         down_payment: isTempo ? downPayment : currentTotal,
         discount: txDiscount,
@@ -303,7 +371,10 @@ export default function UnifiedPOSHub() {
 
   const resetPOS = () => {
     setRows([emptyRow()]);
-    setCustomerName('Umum'); 
+    setCustomerName('Umum');
+    setSelectedCustomerId(null);
+    setCustomerResults([]);
+    setShowCustomerSuggest(false);
     setCashReceivedStr('');
     setDownPaymentStr('');
     setDiscountStr('');
@@ -322,6 +393,7 @@ export default function UnifiedPOSHub() {
 
     setEditingSale(sale);
     setCustomerName(sale.customer_name);
+    setSelectedCustomerId(sale.customer_id ?? null);
     setSelectedPayment(sale.payment_method);
     setDownPaymentStr(sale.down_payment.toString());
     setDiscountStr((sale.discount ?? 0).toString());
@@ -362,6 +434,7 @@ export default function UnifiedPOSHub() {
         total_amount: currentTotal,
         payment_method: selectedPayment,
         customer_name: customerName,
+        customer_id: selectedCustomerId,
         status: isTempo ? (remainingBalance === 0 ? 'PAID' : 'PARTIAL') : 'PAID',
         down_payment: isTempo ? downPayment : currentTotal,
         discount: txDiscount
@@ -597,9 +670,39 @@ export default function UnifiedPOSHub() {
     <View style={styles.receiptCard as ViewStyle}>
       <Text style={styles.sectionTitle}>PEMBAYARAN</Text>
       
-      <View style={styles.mb15}>
+      <View style={[styles.mb15, { position: 'relative', zIndex: 30 }]}>
         <Text style={styles.label}>Nama Pelanggan</Text>
-        <TextInput style={styles.input} value={customerName} onChangeText={setCustomerName} placeholder="Umum" />
+        <TextInput
+          style={styles.input}
+          value={customerName}
+          onChangeText={handleCustomerSearch}
+          onFocus={() => setShowCustomerSuggest(true)}
+          placeholder="Umum"
+        />
+        {selectedCustomerId ? (
+          <Text style={styles.custLinkedHint}>Terhubung ke buku piutang pelanggan</Text>
+        ) : null}
+        {showCustomerSuggest && (
+          <View style={styles.custSuggestBox}>
+            <ScrollView keyboardShouldPersistTaps="handled" nestedScrollEnabled style={{ maxHeight: 200 }}>
+              <TouchableOpacity style={styles.suggestItem} onPress={selectUmum}>
+                <Text style={{ fontWeight: 'bold', color: '#0F172A' }}>Umum (tanpa pelanggan)</Text>
+              </TouchableOpacity>
+              {customerResults.map(c => (
+                <TouchableOpacity key={c.id} style={styles.suggestItem} onPress={() => selectCustomer(c)}>
+                  <Text style={{ fontWeight: 'bold', color: '#0F172A' }}>{c.name}</Text>
+                  {!!c.phone && <Text style={[styles.mono, { fontSize: 11, color: '#64748B' }]}>{c.phone}</Text>}
+                </TouchableOpacity>
+              ))}
+              {online && customerName.trim().length > 0 && customerName.trim().toLowerCase() !== 'umum' &&
+                !customerResults.some(c => c.name.toLowerCase() === customerName.trim().toLowerCase()) && (
+                <TouchableOpacity style={styles.suggestItem} onPress={quickCreateCustomer}>
+                  <Text style={{ fontWeight: 'bold', color: '#DC2626' }}>+ Tambah &quot;{customerName.trim()}&quot;</Text>
+                </TouchableOpacity>
+              )}
+            </ScrollView>
+          </View>
+        )}
       </View>
 
       <View style={styles.mb15}>
@@ -679,11 +782,12 @@ export default function UnifiedPOSHub() {
         )}
       </View>
 
-      <TouchableOpacity onPress={handleCheckout} disabled={loading} style={{ marginTop: 25 }}>
-        <LinearGradient colors={['#DC2626', '#991B1B']} style={styles.payBtn}>
+      <TouchableOpacity onPress={handleCheckout} disabled={loading || !online} style={{ marginTop: 25 }}>
+        <LinearGradient colors={online ? ['#DC2626', '#991B1B'] : ['#CBD5E1', '#94A3B8']} style={styles.payBtn}>
           {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.payBtnText}>PROSES TRANSAKSI</Text>}
         </LinearGradient>
       </TouchableOpacity>
+      {!online && <Text style={styles.offlineHint}>Tidak ada koneksi — transaksi dinonaktifkan sementara.</Text>}
     </View>
   );
 
@@ -889,6 +993,9 @@ const styles = StyleSheet.create({
   mTrash: { width: 42, height: 40, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FEF2F2', borderRadius: 8 },
   suggestBox: { position: 'absolute', top: 42, left: 0, right: 0, backgroundColor: '#FFF', borderRadius: 8, elevation: 10, zIndex: 1000, borderWidth: 1, borderColor: '#E2E8F0' },
   suggestItem: { padding: 12, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  custSuggestBox: { position: 'absolute', top: 62, left: 0, right: 0, backgroundColor: '#FFF', borderRadius: 8, elevation: 10, zIndex: 1000, borderWidth: 1, borderColor: '#E2E8F0' },
+  custLinkedHint: { fontSize: 10, color: '#16A34A', fontWeight: '700', marginTop: 4 },
+  offlineHint: { fontSize: 11, color: '#B45309', marginTop: 10, fontWeight: '600', textAlign: 'center' },
   receiptCard: { 
     backgroundColor: '#FFF', 
     padding: 25, 

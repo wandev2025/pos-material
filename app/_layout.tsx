@@ -3,6 +3,8 @@ import { useFonts } from 'expo-font';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { useEffect } from 'react';
 import { ActivityIndicator, Platform, View } from 'react-native';
+import OfflineBanner from '../components/OfflineBanner';
+import { OfflineProvider } from '../lib/offline/OfflineContext';
 import { ProfileProvider, useProfile } from '../lib/ProfileContext';
 
 function RootLayoutNav() {
@@ -68,8 +70,13 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <ProfileProvider>
-      <RootLayoutNav />
-    </ProfileProvider>
+    <OfflineProvider>
+      <ProfileProvider>
+        <View style={{ flex: 1 }}>
+          <OfflineBanner />
+          <RootLayoutNav />
+        </View>
+      </ProfileProvider>
+    </OfflineProvider>
   );
 }

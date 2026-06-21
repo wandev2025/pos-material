@@ -2,7 +2,7 @@ import { Feather } from '@expo/vector-icons';
 import { Tabs, usePathname, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
-import Animated, { FadeIn, FadeOut, LinearTransition, SlideInDown, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInDown, FadeOut, LinearTransition, SlideInDown, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import PressableScale from '../../components/PressableScale';
 import { useProfile } from '../../lib/ProfileContext';
@@ -326,15 +326,17 @@ function FloatingTabBar() {
             </TouchableOpacity>
             <Text style={tabStyles.sheetTitle}>MENU LAINNYA</Text>
             <View style={tabStyles.grid}>
-              {overflow.map((item) => {
+              {overflow.map((item, i) => {
                 const active = pathname === item.path;
                 return (
-                  <TouchableOpacity key={item.path} style={tabStyles.tile} onPress={() => go(item.route)}>
-                    <View style={[tabStyles.tileIcon, active && tabStyles.tileIconActive]}>
-                      <Feather name={item.icon as any} size={20} color={active ? '#FFF' : '#DC2626'} />
-                    </View>
-                    <Text style={tabStyles.tileLabel} numberOfLines={1}>{item.label}</Text>
-                  </TouchableOpacity>
+                  <Animated.View key={item.path} entering={FadeInDown.duration(220).delay(i * 30)} style={tabStyles.tile}>
+                    <PressableScale onPress={() => go(item.route)} style={{ alignItems: 'center', gap: 8 }}>
+                      <View style={[tabStyles.tileIcon, active && tabStyles.tileIconActive]}>
+                        <Feather name={item.icon as any} size={20} color={active ? '#FFF' : '#DC2626'} />
+                      </View>
+                      <Text style={tabStyles.tileLabel} numberOfLines={1}>{item.label}</Text>
+                    </PressableScale>
+                  </Animated.View>
                 );
               })}
             </View>

@@ -56,7 +56,7 @@ declare
   v_sale  sales;
   v_item  jsonb;
 begin
-  insert into sales (total_amount, payment_method, customer_name, status, down_payment, employee_name, discount)
+  insert into sales (total_amount, payment_method, customer_name, status, down_payment, employee_name, discount, customer_id)
   values (
     (p_sale->>'total_amount')::numeric,
     p_sale->>'payment_method',
@@ -64,7 +64,8 @@ begin
     p_sale->>'status',
     coalesce((p_sale->>'down_payment')::numeric, 0),
     p_sale->>'employee_name',
-    coalesce((p_sale->>'discount')::numeric, 0)
+    coalesce((p_sale->>'discount')::numeric, 0),
+    nullif(p_sale->>'customer_id', '')::bigint
   )
   returning * into v_sale;
 
@@ -118,7 +119,8 @@ begin
          customer_name  = p_sale->>'customer_name',
          status         = p_sale->>'status',
          down_payment   = coalesce((p_sale->>'down_payment')::numeric, 0),
-         discount       = coalesce((p_sale->>'discount')::numeric, 0)
+         discount       = coalesce((p_sale->>'discount')::numeric, 0),
+         customer_id    = nullif(p_sale->>'customer_id', '')::bigint
    where id = p_sale_id
    returning * into v_sale;
 
