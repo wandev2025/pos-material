@@ -1,3 +1,5 @@
+import { useProfile } from '@/lib/ProfileContext';
+import { supabase } from '@/lib/supabase';
 import { Feather } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import {
@@ -6,8 +8,6 @@ import {
   ScrollView, StyleSheet, Text,
   TextInput, TouchableOpacity, useWindowDimensions, View
 } from 'react-native';
-import { useProfile } from '../../lib/ProfileContext';
-import { supabase } from '../../lib/supabase';
 
 // --- TYPES ---
 type TabType = 'INFO' | 'PRINTERS' | 'METRICS' | 'PAYMENT';
@@ -42,9 +42,9 @@ export default function SetupScreen() {
   const [metrics, setMetrics] = useState<Metric[]>([]);
   const [payments, setPayments] = useState<PaymentMethod[]>([]);
   
-  const [settings, setSettings] = useState({ 
-    shop_name: '', shop_address: '', shop_phone: '', 
-    thermal_footer: '', invoice_footer: '', 
+  const [settings, setSettings] = useState({
+    shop_name: '', shop_address: '', shop_phone: '',
+    thermal_footer: '', invoice_footer: '', do_footer: '',
     thermal_printer_name: '', invoice_printer_name: '', do_printer_name: ''
   });
 
@@ -159,8 +159,14 @@ node -e "const express=require('express');const cors=require('cors');const ptp=r
             <TextInput style={styles.input} value={settings.shop_name} onChangeText={t => setSettings({...settings, shop_name: t})} />
             <Text style={styles.label}>Alamat Operasional</Text>
             <TextInput style={styles.input} value={settings.shop_address} onChangeText={t => setSettings({...settings, shop_address: t})} />
-            <Text style={styles.label}>Pesan Struk (Footer)</Text>
+            <Text style={styles.label}>Telepon / WA</Text>
+            <TextInput style={styles.input} value={settings.shop_phone} onChangeText={t => setSettings({...settings, shop_phone: t})} keyboardType="phone-pad" />
+            <Text style={styles.label}>Pesan Struk (Footer Thermal)</Text>
             <TextInput style={styles.input} value={settings.thermal_footer} onChangeText={t => setSettings({...settings, thermal_footer: t})} />
+            <Text style={styles.label}>Catatan Faktur</Text>
+            <TextInput style={styles.input} value={settings.invoice_footer} onChangeText={t => setSettings({...settings, invoice_footer: t})} />
+            <Text style={styles.label}>Catatan Surat Jalan (DO)</Text>
+            <TextInput style={styles.input} value={settings.do_footer} onChangeText={t => setSettings({...settings, do_footer: t})} />
             <TouchableOpacity style={styles.saveBtn} onPress={handleSave}><Text style={styles.btnText}>UPDATE IDENTITAS</Text></TouchableOpacity>
           </View>
         )}
