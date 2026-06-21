@@ -1,9 +1,51 @@
 import { Feather } from '@expo/vector-icons';
+import { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useProfile } from '../../lib/ProfileContext';
+import { supabase } from '../../lib/supabase';
+
+const formatRupiah = (n: number) =>
+  new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(n || 0);
 
 export default function Dashboard() {
   const { profile } = useProfile();
+  const [now, setNow] = useState(new Date());
+  const [stats, setStats] = useState({ count: 0, cash: 0, digital: 0 });
+
+  // Live clock (updates every 30s — enough for an "overview" header).
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Today's sales summary.
+  useEffect(() => {
+    const loadToday = async () => {
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      const { data } = await supabase
+        .from('sales')
+        .select('total_amount, payment_method, down_payment, status')
+        .gte('created_at', start.toISOString());
+      if (!data) return;
+
+      let cash = 0;
+      let digital = 0;
+      for (const s of data as any[]) {
+        // Tempo (credit) sales only count the down payment as money received today.
+        const received = s.status === 'PAID' ? (s.total_amount || 0) : (s.down_payment || 0);
+        if (/tunai|cash/i.test(s.payment_method || '')) cash += received;
+        else digital += received;
+      }
+      setStats({ count: data.length, cash, digital });
+    };
+    loadToday().catch(() => {});
+  }, []);
+
+  const clock = useMemo(
+    () => now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+    [now]
+  );
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -14,15 +56,15 @@ export default function Dashboard() {
       <View style={styles.statsCard}>
         <View style={styles.cardHeader}>
           <Text style={styles.cardTitle}>OVERVIEW HARI INI</Text>
-          <Text style={styles.time}>00.57</Text>
+          <Text style={styles.time}>{clock}</Text>
         </View>
         <View style={styles.statsRow}>
-          <StatItem label="SALES" value="0" unit="Nota" />
-          <StatItem label="CASH" value="Rp 0" isRed />
-          <StatItem label="DIGITAL" value="Rp 0" isRed />
+          <StatItem label="SALES" value={String(stats.count)} unit="Nota" />
+          <StatItem label="CASH" value={formatRupiah(stats.cash)} isRed />
+          <StatItem label="DIGITAL" value={formatRupiah(stats.digital)} isRed />
         </View>
         <Text style={styles.onDuty}>ON DUTY</Text>
-        <Text style={styles.noAbsen}>Belum ada absen masuk</Text>
+        <Text style={styles.noAbsen}>{profile?.full_name || 'Belum ada absen masuk'}</Text>
       </View>
 
       <View style={styles.statusCard}>
