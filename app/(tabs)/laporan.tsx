@@ -26,6 +26,7 @@ interface SaleRow {
   customer_name: string;
   status: 'PAID' | 'PARTIAL' | 'UNPAID';
   down_payment: number;
+  discount?: number;
   employee_name: string;
   created_at: string;
 }
@@ -89,7 +90,8 @@ export default function LaporanScreen() {
   // --- DERIVED METRICS ---
   const summary = useMemo(() => {
     const revenue = sales.reduce((a, s) => a + (s.total_amount || 0), 0);
-    return { count: sales.length, revenue, avg: sales.length ? revenue / sales.length : 0 };
+    const discount = sales.reduce((a, s) => a + (s.discount || 0), 0);
+    return { count: sales.length, revenue, avg: sales.length ? revenue / sales.length : 0, discount };
   }, [sales]);
 
   const daily = useMemo(() => {
@@ -211,6 +213,7 @@ export default function LaporanScreen() {
           <View style={styles.heroCard}>
             <Text style={styles.summaryLabelLight}>OMZET</Text>
             <Text style={styles.heroVal} numberOfLines={1} adjustsFontSizeToFit>{formatRupiah(summary.revenue)}</Text>
+            <Text style={styles.heroSub}>Total diskon diberikan: {formatRupiah(summary.discount)}</Text>
           </View>
           <View style={styles.summaryRow}>
             <View style={styles.summaryCard}>
@@ -312,6 +315,7 @@ const styles = StyleSheet.create({
   presetTextActive: { color: '#FFF' },
   heroCard: { backgroundColor: '#0F172A', borderRadius: 16, padding: 18, marginBottom: 10 },
   heroVal: { fontSize: 30, fontWeight: '900', color: '#FFF', marginTop: 2 },
+  heroSub: { fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 6, fontWeight: '600' },
   summaryRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
   summaryCard: { flex: 1, backgroundColor: '#FFF', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#E5E7EB' },
   summaryLabel: { fontSize: 9, fontWeight: '800', color: '#94A3B8', marginBottom: 6 },

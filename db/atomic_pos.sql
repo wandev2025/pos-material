@@ -42,6 +42,11 @@
 -- actually has — but forgot to restock in the app — never blocks a sale.
 alter table inventory add column if not exists allow_preorder boolean not null default false;
 
+-- Rupiah discounts: a per-line discount on each item, and a transaction-level
+-- discount on the whole sale. total_amount is always stored as the NET payable.
+alter table sales      add column if not exists discount numeric not null default 0;
+alter table sale_items add column if not exists discount numeric not null default 0;
+
 -- Create a sale + its items and decrement stock, all-or-nothing.
 create or replace function create_sale(p_sale jsonb, p_items jsonb)
 returns sales
@@ -51,26 +56,28 @@ declare
   v_sale  sales;
   v_item  jsonb;
 begin
-  insert into sales (total_amount, payment_method, customer_name, status, down_payment, employee_name)
+  insert into sales (total_amount, payment_method, customer_name, status, down_payment, employee_name, discount)
   values (
     (p_sale->>'total_amount')::numeric,
     p_sale->>'payment_method',
     p_sale->>'customer_name',
     p_sale->>'status',
     coalesce((p_sale->>'down_payment')::numeric, 0),
-    p_sale->>'employee_name'
+    p_sale->>'employee_name',
+    coalesce((p_sale->>'discount')::numeric, 0)
   )
   returning * into v_sale;
 
   for v_item in select * from jsonb_array_elements(p_items)
   loop
-    insert into sale_items (sale_id, inventory_id, item_name, quantity, price_at_sale)
+    insert into sale_items (sale_id, inventory_id, item_name, quantity, price_at_sale, discount)
     values (
       v_sale.id,
       (v_item->>'inventory_id')::bigint,
       v_item->>'item_name',
       (v_item->>'quantity')::numeric,
-      (v_item->>'price_at_sale')::numeric
+      (v_item->>'price_at_sale')::numeric,
+      coalesce((v_item->>'discount')::numeric, 0)
     );
 
     update inventory
@@ -110,19 +117,21 @@ begin
          payment_method = p_sale->>'payment_method',
          customer_name  = p_sale->>'customer_name',
          status         = p_sale->>'status',
-         down_payment   = coalesce((p_sale->>'down_payment')::numeric, 0)
+         down_payment   = coalesce((p_sale->>'down_payment')::numeric, 0),
+         discount       = coalesce((p_sale->>'discount')::numeric, 0)
    where id = p_sale_id
    returning * into v_sale;
 
   for v_item in select * from jsonb_array_elements(p_items)
   loop
-    insert into sale_items (sale_id, inventory_id, item_name, quantity, price_at_sale)
+    insert into sale_items (sale_id, inventory_id, item_name, quantity, price_at_sale, discount)
     values (
       p_sale_id,
       (v_item->>'inventory_id')::bigint,
       v_item->>'item_name',
       (v_item->>'quantity')::numeric,
-      (v_item->>'price_at_sale')::numeric
+      (v_item->>'price_at_sale')::numeric,
+      coalesce((v_item->>'discount')::numeric, 0)
     );
 
     update inventory
