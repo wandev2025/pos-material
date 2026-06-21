@@ -53,7 +53,7 @@ export default function SetupScreen() {
   const [newPayment, setNewPayment] = useState('');
 
   useEffect(() => { 
-    if (profile?.role === 'OWNER') {
+    if (profile?.role === 'OWNER' || profile?.role === 'SUPERADMIN') {
         loadAllData();
         const interval = setInterval(checkBridge, 5000);
         return () => clearInterval(interval);
@@ -135,7 +135,7 @@ node -e "const express=require('express');const cors=require('cors');const ptp=r
     }
   };
 
-  if (profile?.role !== 'OWNER') return <View style={styles.center}><Text>Akses Owner Diperlukan</Text></View>;
+  if (profile?.role !== 'OWNER' && profile?.role !== 'SUPERADMIN') return <View style={styles.center}><Text>Akses Owner Diperlukan</Text></View>;
 
   return (
     <View style={[styles.container, isDesktop && styles.row]}>
