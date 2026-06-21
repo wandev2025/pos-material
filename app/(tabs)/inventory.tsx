@@ -228,7 +228,7 @@ export default function InventoryScreen() {
       )}
 
       {/* FAB: ADD */}
-      <TouchableOpacity style={styles.fab} onPress={() => { setSelectedItem(null); setFormName(''); setFormQty(''); setFormPrice(''); setFormMinStock('5'); setFormAllowPreorder(false); setAddModalVisible(true); }}>
+      <TouchableOpacity style={[styles.fab, !isDesktop && { bottom: 110 }]} onPress={() => { setSelectedItem(null); setFormName(''); setFormQty(''); setFormPrice(''); setFormMinStock('5'); setFormAllowPreorder(false); setAddModalVisible(true); }}>
         <Feather name="plus" size={30} color="#FFF" />
       </TouchableOpacity>
 

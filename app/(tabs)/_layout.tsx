@@ -165,6 +165,7 @@ export default function TabLayout() {
           headerStyle: { backgroundColor: '#FFF', borderBottomColor: '#F3F4F6', borderBottomWidth: 1 },
           headerTitleStyle: { fontWeight: '900', color: '#111827', fontSize: 18 },
           tabBarStyle: { display: 'none' },
+          animation: 'fade',
         }}>
       <Tabs.Screen 
         name="index" 
