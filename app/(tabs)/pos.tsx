@@ -1,8 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Picker } from '@react-native-picker/picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Print from 'expo-print';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert, Keyboard, KeyboardAvoidingView,
   Modal, Platform, ScrollView, StyleSheet, Text,
@@ -99,7 +98,6 @@ export default function UnifiedPOSHub() {
   const [activeTab, setActiveTab] = useState<'input' | 'history'>('input');
   const [loading, setLoading] = useState(false);
   const [settings, setSettings] = useState<PrintSettings | null>(null);
-  const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
 
@@ -111,6 +109,7 @@ export default function UnifiedPOSHub() {
   const [rows, setRows] = useState<SaleRow[]>([{ _id: generateId(), item: null, query: '', qty: '1', price: '0', total: '0' }]);
   const [activeRowId, setActiveRowId] = useState<string | null>(null);
   const [filteredInv, setFilteredInv] = useState<InventoryItem[]>([]);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Modal States
   const [printModal, setPrintModal] = useState(false);
@@ -129,18 +128,15 @@ export default function UnifiedPOSHub() {
 
   const loadInitialData = async () => {
     try {
-      const [setRes, invRes, pmRes] = await Promise.all([
+      const [setRes, pmRes] = await Promise.all([
         supabase.from('print_settings').select('*').eq('id', 1).single(),
-        supabase.from('inventory').select('*').order('item_name'),
         supabase.from('payment_methods').select('*').order('name')
       ]);
 
       if (setRes.error) throw new Error("Gagal mengambil pengaturan cetak");
-      if (invRes.error) throw new Error("Gagal mengambil data inventori");
       if (pmRes.error) throw new Error("Gagal mengambil metode pembayaran");
 
       if (setRes.data) setSettings(setRes.data);
-      if (invRes.data) setInventory(invRes.data);
       if (pmRes.data) {
         setPaymentMethods(pmRes.data);
         if (pmRes.data.length > 0) setSelectedPayment(pmRes.data[0].name);
@@ -173,7 +169,21 @@ export default function UnifiedPOSHub() {
   const handleSearch = (text: string, rowId: string) => {
     setRows(prev => prev.map(r => r._id === rowId ? { ...r, query: text } : r));
     setActiveRowId(rowId);
-    setFilteredInv(text ? inventory.filter(i => i.item_name.toLowerCase().includes(text.toLowerCase())) : []);
+
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    const q = text.trim();
+    if (!q) { setFilteredInv([]); return; }
+
+    // Server-side search so a catalog of thousands stays fast (only matches are fetched).
+    searchTimer.current = setTimeout(async () => {
+      const { data } = await supabase
+        .from('inventory')
+        .select('*')
+        .ilike('item_name', `%${q}%`)
+        .order('item_name')
+        .limit(25);
+      setFilteredInv((data as InventoryItem[]) || []);
+    }, 250);
   };
 
   const selectItem = (item: InventoryItem, rowId: string) => {
@@ -205,6 +215,12 @@ export default function UnifiedPOSHub() {
 
   const removeRow = (rowId: string) => {
     if (rows.length > 1) setRows(rows.filter(r => r._id !== rowId));
+  };
+
+  const stepQty = (rowId: string, delta: number) => {
+    const row = rows.find(r => r._id === rowId);
+    const next = Math.max(0, parseNum(row?.qty) + delta);
+    updateRow(rowId, 'qty', String(next));
   };
 
   // --- CORE TRANSACTIONS ---
@@ -292,9 +308,14 @@ export default function UnifiedPOSHub() {
     setCustomerName(sale.customer_name);
     setSelectedPayment(sale.payment_method);
     setDownPaymentStr(sale.down_payment.toString());
-    
+
+    // Pull only the inventory rows referenced by this sale (no full-catalog load).
+    const ids = (items as SaleItem[]).map(it => it.inventory_id);
+    const { data: invData } = await supabase.from('inventory').select('*').in('id', ids);
+    const invMap = new Map((invData as InventoryItem[] || []).map(i => [i.id, i]));
+
     const mappedRows: SaleRow[] = (items as SaleItem[]).map(it => {
-      const inv = inventory.find(i => i.id === it.inventory_id) || null;
+      const inv = invMap.get(it.inventory_id) || null;
       return {
         _id: generateId(),
         item: inv,
@@ -397,20 +418,20 @@ export default function UnifiedPOSHub() {
     <View style={styles.card}>
       <Text style={styles.sectionTitle}>DETAIL PESANAN</Text>
       <View style={styles.tableHead}>
-        <Text style={[styles.th, { flex: 3 }]}>BARANG</Text>
+        <Text style={[styles.th, { flex: 2.6 }]}>BARANG</Text>
         <Text style={[styles.th, { flex: 0.8, textAlign: 'center' }]}>STOK</Text>
-        <Text style={[styles.th, { flex: 1, textAlign: 'center' }]}>QTY</Text>
-        <Text style={[styles.th, { flex: 1.5, textAlign: 'center' }]}>HARGA</Text>
+        <Text style={[styles.th, { flex: 1.8, textAlign: 'center' }]}>QTY</Text>
+        <Text style={[styles.th, { flex: 1.3, textAlign: 'center' }]}>HARGA</Text>
         <Text style={[styles.th, { flex: 1.5, textAlign: 'right', paddingRight: 10 }]}>TOTAL</Text>
         <View style={{ width: 30 }} />
       </View>
 
       {rows.map((row) => (
         <View key={row._id} style={[styles.tableRow, { zIndex: activeRowId === row._id ? 100 : 1 }]}>
-          <View style={{ flex: 3 }}>
-            <TextInput 
-              style={styles.cellInput} 
-              placeholder="Cari item..." 
+          <View style={{ flex: 2.6 }}>
+            <TextInput
+              style={styles.cellInput}
+              placeholder="Cari item..."
               value={row.query} 
               onChangeText={t => handleSearch(t, row._id)} 
               onFocus={() => setActiveRowId(row._id)}
@@ -421,7 +442,7 @@ export default function UnifiedPOSHub() {
                   {filteredInv.map(item => (
                     <TouchableOpacity key={item.id} style={styles.suggestItem} onPress={() => selectItem(item, row._id)}>
                       <Text style={{ fontWeight: 'bold', color: '#0F172A' }}>{item.item_name}</Text>
-                      <Text style={[styles.mono, { fontSize: 11, color: '#64748B' }]}>{formatRupiah(item.price)} • Stok: {item.quantity}</Text>
+                      <Text style={[styles.mono, { fontSize: 11, color: '#64748B' }]}>{formatRupiah(item.price)} • Stok: {item.quantity}{item.allow_preorder ? ' • Pre-order' : ''}</Text>
                     </TouchableOpacity>
                   ))}
                 </ScrollView>
@@ -429,8 +450,16 @@ export default function UnifiedPOSHub() {
             )}
           </View>
           <Text style={[styles.mono, styles.cellText, { flex: 0.8 }]}>{row.item?.quantity ?? '-'}</Text>
-          <TextInput style={[styles.mono, styles.cellInput, { flex: 1 }]} keyboardType="numeric" value={row.qty} onChangeText={t => updateRow(row._id, 'qty', t)} />
-          <TextInput style={[styles.mono, styles.cellInput, { flex: 1.5 }]} keyboardType="numeric" value={row.price} onChangeText={t => updateRow(row._id, 'price', t)} />
+          <View style={styles.qtyStepper}>
+            <TouchableOpacity style={styles.stepBtn} onPress={() => stepQty(row._id, -1)}>
+              <Ionicons name="remove" size={16} color="#0F172A" />
+            </TouchableOpacity>
+            <TextInput style={[styles.mono, styles.qtyInput]} keyboardType="numeric" value={row.qty} onChangeText={t => updateRow(row._id, 'qty', t)} />
+            <TouchableOpacity style={styles.stepBtn} onPress={() => stepQty(row._id, 1)}>
+              <Ionicons name="add" size={16} color="#0F172A" />
+            </TouchableOpacity>
+          </View>
+          <TextInput style={[styles.mono, styles.cellInput, { flex: 1.3 }]} keyboardType="numeric" value={row.price} onChangeText={t => updateRow(row._id, 'price', t)} />
           <Text style={[styles.mono, styles.cellTotal, { flex: 1.5 }]}>{formatRupiah(parseNum(row.total))}</Text>
           <TouchableOpacity onPress={() => removeRow(row._id)} style={styles.removeBtn}>
             <Ionicons name="trash-outline" size={18} color="#94A3B8" />
@@ -451,15 +480,20 @@ export default function UnifiedPOSHub() {
 
       <View style={styles.mb15}>
         <Text style={styles.label}>Metode Bayar</Text>
-        <View style={styles.pickerWrap}>
-          {paymentMethods.length > 0 ? (
-            <Picker selectedValue={selectedPayment} onValueChange={setSelectedPayment}>
-              {paymentMethods.map(m => <Picker.Item key={m.id} label={m.name} value={m.name} />)}
-            </Picker>
-          ) : (
-            <Text style={styles.emptyText}>Memuat metode...</Text>
-          )}
-        </View>
+        {paymentMethods.length > 0 ? (
+          <View style={styles.payWrap}>
+            {paymentMethods.map(m => {
+              const active = selectedPayment === m.name;
+              return (
+                <TouchableOpacity key={m.id} onPress={() => setSelectedPayment(m.name)} style={[styles.payChip, active && styles.payChipActive]}>
+                  <Text style={[styles.payChipText, active && styles.payChipTextActive]}>{m.name}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        ) : (
+          <Text style={styles.emptyText}>Memuat metode...</Text>
+        )}
       </View>
 
       <View style={styles.receiptDivider} />
@@ -638,8 +672,12 @@ const styles = StyleSheet.create({
   mb15: { marginBottom: 15 },
   row: { flexDirection: 'row' },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  pickerWrap: { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 8, height: 48, justifyContent: 'center' },
   emptyText: { paddingLeft: 10, fontSize: 12, color: '#94A3B8' },
+  payWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  payChip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10, backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0' },
+  payChipActive: { backgroundColor: '#0F172A', borderColor: '#0F172A' },
+  payChipText: { fontSize: 13, fontWeight: '700', color: '#475569' },
+  payChipTextActive: { color: '#FFF' },
   tableHead: { flexDirection: 'row', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F1F5F9', marginBottom: 10 },
   th: { fontSize: 10, fontWeight: '800', color: '#94A3B8' },
   tableRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 8 },
@@ -647,6 +685,9 @@ const styles = StyleSheet.create({
   cellText: { fontSize: 13, textAlign: 'center', color: '#0F172A' },
   cellTotal: { fontSize: 13, fontWeight: '700', color: '#0F172A', textAlign: 'right' },
   removeBtn: { width: 30, alignItems: 'center' },
+  qtyStepper: { flex: 1.8, flexDirection: 'row', alignItems: 'center' },
+  stepBtn: { width: 26, height: 32, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 6, justifyContent: 'center', alignItems: 'center' },
+  qtyInput: { flex: 1, backgroundColor: '#F8FAFC', borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#E2E8F0', paddingVertical: 8, fontSize: 13, textAlign: 'center', marginHorizontal: 2, color: '#0F172A' },
   suggestBox: { position: 'absolute', top: 42, left: 0, right: 0, backgroundColor: '#FFF', borderRadius: 8, elevation: 10, zIndex: 1000, borderWidth: 1, borderColor: '#E2E8F0' },
   suggestItem: { padding: 12, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
   receiptCard: { 
