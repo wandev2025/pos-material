@@ -247,16 +247,18 @@ export default function InventoryScreen() {
                 <View style={{flex:1, marginRight:10}}><Text style={styles.label}>Stok Awal</Text><TextInput style={styles.input} keyboardType="numeric" value={formQty} onChangeText={setFormQty}/></View>
                 <View style={{flex:1}}><Text style={styles.label}>Harga (Rp)</Text><TextInput style={styles.input} keyboardType="numeric" value={formPrice} onChangeText={setFormPrice}/></View>
               </View>
-              <View style={styles.row}>
-                <View style={{flex:1, marginRight:10}}><Text style={styles.label}>Batas Minim</Text><TextInput style={styles.input} keyboardType="numeric" value={formMinStock} onChangeText={setFormMinStock}/></View>
-                <View style={{flex:1}}>
-                    <Text style={styles.label}>Satuan</Text>
-                    <View style={styles.pickerWrapper}>
-                        <Picker selectedValue={formMetricId} onValueChange={(v) => setFormMetricId(v)}>
-                            {metrics.map(m => <Picker.Item key={m.id} label={m.unit_name.toUpperCase()} value={m.id.toString()} />)}
-                        </Picker>
-                    </View>
-                </View>
+              <Text style={styles.label}>Batas Minim Stok</Text>
+              <TextInput style={styles.input} keyboardType="numeric" value={formMinStock} onChangeText={setFormMinStock}/>
+              <Text style={styles.label}>Satuan</Text>
+              <View style={styles.unitWrap}>
+                {metrics.map(m => {
+                  const active = formMetricId === m.id.toString();
+                  return (
+                    <TouchableOpacity key={m.id} onPress={() => setFormMetricId(m.id.toString())} style={[styles.unitChip, active && styles.unitChipActive]}>
+                      <Text style={[styles.unitChipText, active && styles.unitChipTextActive]}>{m.unit_name.toUpperCase()}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
               <View style={styles.switchRow}>
                 <View style={{ flex: 1 }}>
@@ -399,6 +401,11 @@ const styles = StyleSheet.create({
   
   label: { fontSize: 11, fontWeight: '800', color: '#94A3B8', marginBottom: 8, textTransform: 'uppercase' },
   input: { backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, padding: 12, fontSize: 15, color: '#111827', marginBottom: 15 },
+  unitWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 15 },
+  unitChip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10, backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: '#E5E7EB' },
+  unitChipActive: { backgroundColor: '#DC2626', borderColor: '#DC2626' },
+  unitChipText: { fontSize: 13, fontWeight: '700', color: '#475569' },
+  unitChipTextActive: { color: '#FFF' },
   row: { flexDirection: 'row' },
   pickerWrapper: { backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, height: 50, justifyContent: 'center', marginBottom: 15, overflow: 'hidden' },
   
