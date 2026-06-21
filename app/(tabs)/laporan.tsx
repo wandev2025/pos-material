@@ -207,19 +207,19 @@ export default function LaporanScreen() {
 
       {loading ? <ActivityIndicator style={{ marginTop: 50 }} color="#DC2626" /> : (
         <>
-          {/* Summary */}
+          {/* Summary: OMZET hero on top, the pair below */}
+          <View style={styles.heroCard}>
+            <Text style={styles.summaryLabelLight}>OMZET</Text>
+            <Text style={styles.heroVal} numberOfLines={1} adjustsFontSizeToFit>{formatRupiah(summary.revenue)}</Text>
+          </View>
           <View style={styles.summaryRow}>
-            <View style={[styles.summaryCard, { backgroundColor: '#0F172A' }]}>
-              <Text style={styles.summaryLabelLight}>OMZET</Text>
-              <Text style={styles.summaryValLight}>{formatRupiah(summary.revenue)}</Text>
-            </View>
             <View style={styles.summaryCard}>
               <Text style={styles.summaryLabel}>TRANSAKSI</Text>
-              <Text style={styles.summaryVal}>{summary.count}</Text>
+              <Text style={styles.summaryVal} numberOfLines={1} adjustsFontSizeToFit>{summary.count}</Text>
             </View>
             <View style={styles.summaryCard}>
               <Text style={styles.summaryLabel}>RATA-RATA</Text>
-              <Text style={styles.summaryVal}>{formatRupiah(summary.avg)}</Text>
+              <Text style={styles.summaryVal} numberOfLines={1} adjustsFontSizeToFit>{formatRupiah(summary.avg)}</Text>
             </View>
           </View>
 
@@ -310,12 +310,13 @@ const styles = StyleSheet.create({
   presetActive: { backgroundColor: '#DC2626', borderColor: '#DC2626' },
   presetText: { fontSize: 12, fontWeight: '700', color: '#64748B' },
   presetTextActive: { color: '#FFF' },
+  heroCard: { backgroundColor: '#0F172A', borderRadius: 16, padding: 18, marginBottom: 10 },
+  heroVal: { fontSize: 30, fontWeight: '900', color: '#FFF', marginTop: 2 },
   summaryRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
   summaryCard: { flex: 1, backgroundColor: '#FFF', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#E5E7EB' },
   summaryLabel: { fontSize: 9, fontWeight: '800', color: '#94A3B8', marginBottom: 6 },
-  summaryVal: { fontSize: 16, fontWeight: '900', color: '#0F172A' },
+  summaryVal: { fontSize: 18, fontWeight: '900', color: '#0F172A' },
   summaryLabelLight: { fontSize: 9, fontWeight: '800', color: '#94A3B8', marginBottom: 6 },
-  summaryValLight: { fontSize: 16, fontWeight: '900', color: '#FFF' },
   card: { backgroundColor: '#FFF', borderRadius: 16, padding: 18, marginBottom: 16, borderWidth: 1, borderColor: '#F1F5F9' },
   cardTitle: { fontSize: 11, fontWeight: '900', color: '#94A3B8', letterSpacing: 1, marginBottom: 12 },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
