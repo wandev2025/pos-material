@@ -1,14 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as Print from 'expo-print';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { createElement, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert, Keyboard, KeyboardAvoidingView,
   Modal, Platform, ScrollView, StyleSheet, Text,
   TextInput, TouchableOpacity, useWindowDimensions, View, ViewStyle
 } from 'react-native';
+import { DeliveryOrderPreview, InvoicePreview, ThermalPreview } from '../../components/PrintPreviews';
 import { parseNum } from '../../lib/number';
-import { generatePrintHtml } from '../../lib/printTemplates';
+import type { DocType, PrintConfig } from '../../lib/printing';
+import { DEFAULT_PRINT_CONFIG, generatePrintHtml, printDocument } from '../../lib/printing';
 import { useProfile } from '../../lib/ProfileContext';
 import { supabase } from '../../lib/supabase';
 
@@ -38,6 +39,7 @@ interface SaleRow {
   query: string;
   qty: string;
   price: string;
+  discount: string;
   total: string;
 }
 
@@ -48,6 +50,7 @@ interface Sale {
   customer_name: string;
   status: 'PAID' | 'PARTIAL' | 'UNPAID';
   down_payment: number;
+  discount?: number;
   employee_name: string;
   created_at: string;
 }
@@ -59,6 +62,7 @@ interface SaleItem {
   item_name: string;
   quantity: number;
   price_at_sale: number;
+  discount?: number;
 }
 
 interface PrintSettings {
@@ -69,6 +73,7 @@ interface PrintSettings {
   thermal_footer: string;
   invoice_footer: string;
   do_footer: string;
+  print_config?: PrintConfig;
 }
 
 // --- PURE HELPERS ---
@@ -80,6 +85,8 @@ const formatRupiah = (n: number) =>
   }).format(Math.round(n) || 0);
 
 const generateId = () => Math.random().toString(36).substring(2, 15);
+
+const emptyRow = (): SaleRow => ({ _id: generateId(), item: null, query: '', qty: '1', price: '0', discount: '0', total: '0' });
 
 const MONO_STACK = Platform.select({
   ios: 'Courier New',
@@ -106,7 +113,9 @@ export default function UnifiedPOSHub() {
   const [selectedPayment, setSelectedPayment] = useState('');
   const [cashReceivedStr, setCashReceivedStr] = useState('');
   const [downPaymentStr, setDownPaymentStr] = useState('');
-  const [rows, setRows] = useState<SaleRow[]>([{ _id: generateId(), item: null, query: '', qty: '1', price: '0', total: '0' }]);
+  const [discountStr, setDiscountStr] = useState('');
+  const [showDiscount, setShowDiscount] = useState(false);
+  const [rows, setRows] = useState<SaleRow[]>([emptyRow()]);
   const [activeRowId, setActiveRowId] = useState<string | null>(null);
   const [filteredInv, setFilteredInv] = useState<InventoryItem[]>([]);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -117,6 +126,7 @@ export default function UnifiedPOSHub() {
   const [lastSale, setLastSale] = useState<Sale | null>(null);
   const [lastSaleItems, setLastSaleItems] = useState<SaleItem[]>([]);
   const [editingSale, setEditingSale] = useState<Sale | null>(null);
+  const [previewType, setPreviewType] = useState<DocType | null>(null);
 
   useEffect(() => {
     loadInitialData();
@@ -155,9 +165,11 @@ export default function UnifiedPOSHub() {
   };
 
   // --- CALCULATIONS ---
-  const currentTotal = useMemo(() => 
-    Math.round(rows.reduce((acc, row) => acc + parseNum(row.total), 0)), 
+  const subtotal = useMemo(() =>
+    Math.round(rows.reduce((acc, row) => acc + parseNum(row.total), 0)),
   [rows]);
+  const txDiscount = Math.min(subtotal, Math.round(parseNum(discountStr)));
+  const currentTotal = Math.max(0, subtotal - txDiscount);
   
   const cashReceived = Math.round(parseNum(cashReceivedStr));
   const downPayment = Math.round(parseNum(downPaymentStr));
@@ -192,10 +204,10 @@ export default function UnifiedPOSHub() {
 
     setRows(prev => {
       const newRows = prev.map(r => r._id === rowId ? { 
-        ...r, item, query: item.item_name, price: item.price.toString(), total: item.price.toString() 
+        ...r, item, query: item.item_name, price: item.price.toString(), total: Math.max(0, Math.round(parseNum(r.qty) * item.price - parseNum(r.discount))).toString() 
       } : r);
       if (newRows[newRows.length - 1]._id === rowId) {
-        newRows.push({ _id: generateId(), item: null, query: '', qty: '1', price: '0', total: '0' });
+        newRows.push(emptyRow());
       }
       return newRows;
     });
@@ -203,11 +215,11 @@ export default function UnifiedPOSHub() {
     Keyboard.dismiss();
   };
 
-  const updateRow = (rowId: string, field: 'qty' | 'price', val: string) => {
+  const updateRow = (rowId: string, field: 'qty' | 'discount', val: string) => {
     setRows(prev => prev.map(r => {
       if (r._id !== rowId) return r;
       const updated = { ...r, [field]: val };
-      const rowTotal = Math.round(parseNum(updated.qty) * parseNum(updated.price));
+      const rowTotal = Math.max(0, Math.round(parseNum(updated.qty) * parseNum(updated.price) - parseNum(updated.discount)));
       updated.total = rowTotal.toString();
       return updated;
     }));
@@ -258,6 +270,7 @@ export default function UnifiedPOSHub() {
         customer_name: customerName,
         status: isTempo ? (remainingBalance === 0 ? 'PAID' : 'PARTIAL') : 'PAID',
         down_payment: isTempo ? downPayment : currentTotal,
+        discount: txDiscount,
         employee_name: profile?.full_name || 'Staff'
       };
 
@@ -265,7 +278,8 @@ export default function UnifiedPOSHub() {
         inventory_id: r.item!.id,
         item_name: r.item!.item_name,
         quantity: parseNum(r.qty),
-        price_at_sale: Math.round(parseNum(r.price))
+        price_at_sale: Math.round(parseNum(r.price)),
+        discount: Math.round(parseNum(r.discount))
       }));
 
       // Atomic: inserts the sale + items and decrements stock in one transaction.
@@ -288,10 +302,12 @@ export default function UnifiedPOSHub() {
   };
 
   const resetPOS = () => {
-    setRows([{ _id: generateId(), item: null, query: '', qty: '1', price: '0', total: '0' }]);
+    setRows([emptyRow()]);
     setCustomerName('Umum'); 
-    setCashReceivedStr(''); 
+    setCashReceivedStr('');
     setDownPaymentStr('');
+    setDiscountStr('');
+    setShowDiscount(false);
   };
 
   // --- HISTORY ACTIONS (OWNER/ADMIN ONLY) ---
@@ -308,6 +324,8 @@ export default function UnifiedPOSHub() {
     setCustomerName(sale.customer_name);
     setSelectedPayment(sale.payment_method);
     setDownPaymentStr(sale.down_payment.toString());
+    setDiscountStr((sale.discount ?? 0).toString());
+    setShowDiscount((sale.discount ?? 0) > 0);
 
     // Pull only the inventory rows referenced by this sale (no full-catalog load).
     const ids = (items as SaleItem[]).map(it => it.inventory_id);
@@ -316,16 +334,18 @@ export default function UnifiedPOSHub() {
 
     const mappedRows: SaleRow[] = (items as SaleItem[]).map(it => {
       const inv = invMap.get(it.inventory_id) || null;
+      const disc = it.discount ?? 0;
       return {
         _id: generateId(),
         item: inv,
         query: it.item_name,
         qty: it.quantity.toString(),
         price: it.price_at_sale.toString(),
-        total: (it.quantity * it.price_at_sale).toString()
+        discount: disc.toString(),
+        total: Math.max(0, it.quantity * it.price_at_sale - disc).toString()
       };
     });
-    mappedRows.push({ _id: generateId(), item: null, query: '', qty: '1', price: '0', total: '0' });
+    mappedRows.push(emptyRow());
     
     setRows(mappedRows);
     setEditModal(true);
@@ -343,14 +363,16 @@ export default function UnifiedPOSHub() {
         payment_method: selectedPayment,
         customer_name: customerName,
         status: isTempo ? (remainingBalance === 0 ? 'PAID' : 'PARTIAL') : 'PAID',
-        down_payment: isTempo ? downPayment : currentTotal
+        down_payment: isTempo ? downPayment : currentTotal,
+        discount: txDiscount
       };
 
       const newItems = validRows.map(r => ({
         inventory_id: r.item!.id,
         item_name: r.item!.item_name,
         quantity: parseNum(r.qty),
-        price_at_sale: Math.round(parseNum(r.price))
+        price_at_sale: Math.round(parseNum(r.price)),
+        discount: Math.round(parseNum(r.discount))
       }));
 
       // Atomic: restores old stock, swaps items, re-decrements — single transaction.
@@ -401,21 +423,66 @@ export default function UnifiedPOSHub() {
     );
   };
 
-  const executePrint = async (type: 'THERMAL' | 'FAKTUR' | 'DO') => {
+  const executePrint = async (type: DocType) => {
     if (!lastSale || !settings) return;
-    const html = generatePrintHtml(type, settings, lastSale, lastSaleItems);
-    if (Platform.OS === 'web') {
-      const win = window.open('', '_blank');
-      win?.document.write(html);
-      win?.document.close();
-    } else {
-      await Print.printAsync({ html });
+    // Per-document transport/paper mapping is shop-wide (print_settings.print_config);
+    // printDocument walks the configured transport then its fallback chain so this
+    // never hard-fails (DIALOG is always available and always last).
+    const config = settings.print_config ?? DEFAULT_PRINT_CONFIG;
+    const result = await printDocument({
+      docType: type,
+      settings,
+      sale: lastSale,
+      items: lastSaleItems,
+      config,
+    });
+    if (!result.ok) {
+      Alert.alert('Cetak Gagal', 'Tidak ada metode cetak yang tersedia. Periksa pengaturan printer di Setup.');
     }
   };
 
+  const docLabel = (t: DocType) => (t === 'THERMAL' ? 'Struk' : t === 'FAKTUR' ? 'Faktur' : 'Surat Jalan');
+
+  // Renders exactly what will be printed. On web that is the real generated HTML
+  // in an iframe (true WYSIWYG); on native we fall back to the layout previews.
+  const renderPreviewContent = () => {
+    if (!previewType || !lastSale || !settings) {
+      return <Text style={styles.previewEmpty}>Tidak ada data untuk ditampilkan.</Text>;
+    }
+    if (Platform.OS === 'web') {
+      const html = generatePrintHtml(previewType, settings, lastSale, lastSaleItems);
+      return createElement('iframe', {
+        srcDoc: html,
+        title: 'print-preview',
+        style: { width: '100%', height: '100%', border: 'none', background: '#fff' },
+      } as any);
+    }
+    return (
+      <ScrollView contentContainerStyle={styles.previewNativeScroll}>
+        <ScrollView horizontal showsHorizontalScrollIndicator>
+          {previewType === 'THERMAL' ? (
+            <ThermalPreview settings={settings} />
+          ) : previewType === 'FAKTUR' ? (
+            <InvoicePreview settings={settings} />
+          ) : (
+            <DeliveryOrderPreview settings={settings} />
+          )}
+        </ScrollView>
+      </ScrollView>
+    );
+  };
+
   // --- SUB-COMPONENTS ---
-  const renderSearchCell = (row: SaleRow) => (
-    <View style={{ position: 'relative' }}>
+  const renderSuggestItem = (item: InventoryItem, rowId: string) => (
+    <TouchableOpacity key={item.id} style={styles.suggestItem} onPress={() => selectItem(item, rowId)}>
+      <Text style={{ fontWeight: 'bold', color: '#0F172A' }}>{item.item_name}</Text>
+      <Text style={[styles.mono, { fontSize: 11, color: '#64748B' }]}>{formatRupiah(item.price)} • Stok: {item.quantity}{item.allow_preorder ? ' • Pre-order' : ''}</Text>
+    </TouchableOpacity>
+  );
+
+  // inline (mobile) lists results in-flow below the input; desktop overlays them.
+  const renderSearchCell = (row: SaleRow, inline?: boolean) => (
+    <View style={{ position: 'relative', zIndex: 5 }}>
       <TextInput
         style={styles.cellInput}
         placeholder="Cari item..."
@@ -424,16 +491,17 @@ export default function UnifiedPOSHub() {
         onFocus={() => setActiveRowId(row._id)}
       />
       {activeRowId === row._id && filteredInv.length > 0 && (
-        <View style={styles.suggestBox}>
-          <ScrollView keyboardShouldPersistTaps="handled" nestedScrollEnabled style={{ maxHeight: 200 }}>
-            {filteredInv.map(item => (
-              <TouchableOpacity key={item.id} style={styles.suggestItem} onPress={() => selectItem(item, row._id)}>
-                <Text style={{ fontWeight: 'bold', color: '#0F172A' }}>{item.item_name}</Text>
-                <Text style={[styles.mono, { fontSize: 11, color: '#64748B' }]}>{formatRupiah(item.price)} • Stok: {item.quantity}{item.allow_preorder ? ' • Pre-order' : ''}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
+        inline ? (
+          <View style={styles.suggestInline}>
+            {filteredInv.slice(0, 8).map(item => renderSuggestItem(item, row._id))}
+          </View>
+        ) : (
+          <View style={styles.suggestBox}>
+            <ScrollView keyboardShouldPersistTaps="handled" nestedScrollEnabled style={{ maxHeight: 200 }}>
+              {filteredInv.map(item => renderSuggestItem(item, row._id))}
+            </ScrollView>
+          </View>
+        )
       )}
     </View>
   );
@@ -457,20 +525,22 @@ export default function UnifiedPOSHub() {
       {isDesktop ? (
         <>
           <View style={styles.tableHead}>
-            <Text style={[styles.th, { flex: 2.6 }]}>BARANG</Text>
-            <Text style={[styles.th, { flex: 0.8, textAlign: 'center' }]}>STOK</Text>
-            <Text style={[styles.th, { flex: 1.8, textAlign: 'center' }]}>QTY</Text>
-            <Text style={[styles.th, { flex: 1.3, textAlign: 'center' }]}>HARGA</Text>
-            <Text style={[styles.th, { flex: 1.5, textAlign: 'right', paddingRight: 10 }]}>TOTAL</Text>
+            <Text style={[styles.th, { flex: 2.4 }]}>BARANG</Text>
+            <Text style={[styles.th, { flex: 0.7, textAlign: 'center' }]}>STOK</Text>
+            <Text style={[styles.th, { flex: 1.6, textAlign: 'center' }]}>QTY</Text>
+            <Text style={[styles.th, { flex: 1.2, textAlign: 'right' }]}>HARGA</Text>
+            <Text style={[styles.th, { flex: 1.2, textAlign: 'center' }]}>DISKON</Text>
+            <Text style={[styles.th, { flex: 1.3, textAlign: 'right', paddingRight: 10 }]}>TOTAL</Text>
             <View style={{ width: 30 }} />
           </View>
           {rows.map((row) => (
             <View key={row._id} style={[styles.tableRow, { zIndex: activeRowId === row._id ? 100 : 1 }]}>
-              <View style={{ flex: 2.6 }}>{renderSearchCell(row)}</View>
-              <Text style={[styles.mono, styles.cellText, { flex: 0.8 }]}>{row.item?.quantity ?? '-'}</Text>
-              {renderStepper(row, { flex: 1.8 })}
-              <TextInput style={[styles.mono, styles.cellInput, { flex: 1.3 }]} keyboardType="numeric" value={row.price} onChangeText={t => updateRow(row._id, 'price', t)} />
-              <Text style={[styles.mono, styles.cellTotal, { flex: 1.5 }]}>{formatRupiah(parseNum(row.total))}</Text>
+              <View style={{ flex: 2.4 }}>{renderSearchCell(row)}</View>
+              <Text style={[styles.mono, styles.cellText, { flex: 0.7 }]}>{row.item?.quantity ?? '-'}</Text>
+              {renderStepper(row, { flex: 1.6 })}
+              <Text style={[styles.mono, styles.cellPrice, { flex: 1.2 }]}>{formatRupiah(parseNum(row.price))}</Text>
+              <TextInput style={[styles.mono, styles.cellInput, { flex: 1.2 }]} keyboardType="numeric" value={row.discount} onChangeText={t => updateRow(row._id, 'discount', t)} placeholder="0" />
+              <Text style={[styles.mono, styles.cellTotal, { flex: 1.3 }]}>{formatRupiah(parseNum(row.total))}</Text>
               <TouchableOpacity onPress={() => removeRow(row._id)} style={styles.removeBtn}>
                 <Ionicons name="trash-outline" size={18} color="#94A3B8" />
               </TouchableOpacity>
@@ -480,27 +550,46 @@ export default function UnifiedPOSHub() {
       ) : (
         rows.map((row) => (
           <View key={row._id} style={[styles.mItemCard, { zIndex: activeRowId === row._id ? 100 : 1 }]}>
-            {renderSearchCell(row)}
-            <View style={styles.mItemControls}>
-              <View style={styles.mField}>
-                <Text style={styles.mFieldLabel}>QTY</Text>
-                {renderStepper(row)}
-              </View>
-              <View style={styles.mField}>
-                <Text style={styles.mFieldLabel}>HARGA SATUAN</Text>
-                <TextInput style={[styles.mono, styles.cellInput]} keyboardType="numeric" value={row.price} onChangeText={t => updateRow(row._id, 'price', t)} />
-              </View>
-              <TouchableOpacity onPress={() => removeRow(row._id)} style={styles.mTrash}>
-                <Ionicons name="trash-outline" size={20} color="#DC2626" />
-              </TouchableOpacity>
+            {renderSearchCell(row, true)}
+            <View style={styles.mRow}>
+              <Text style={styles.mRowLabel}>QTY</Text>
+              {renderStepper(row, styles.mStepper)}
+            </View>
+            <View style={styles.mRow}>
+              <Text style={styles.mRowLabel}>HARGA SATUAN</Text>
+              <Text style={[styles.mono, styles.mRowValue]}>{formatRupiah(parseNum(row.price))}</Text>
+            </View>
+            <View style={styles.mRow}>
+              <Text style={styles.mRowLabel}>DISKON ITEM</Text>
+              <TextInput style={[styles.mono, styles.mRowInput]} keyboardType="numeric" value={row.discount} onChangeText={t => updateRow(row._id, 'discount', t)} placeholder="0" />
             </View>
             <View style={styles.mItemFooter}>
               <Text style={styles.mStock}>Stok: {row.item?.quantity ?? '-'}{row.item?.allow_preorder ? ' • Pre-order' : ''}</Text>
-              <Text style={[styles.mono, styles.mTotal]}>{formatRupiah(parseNum(row.total))}</Text>
+              <View style={styles.mFooterRight}>
+                <Text style={[styles.mono, styles.mTotal]}>{formatRupiah(parseNum(row.total))}</Text>
+                <TouchableOpacity onPress={() => removeRow(row._id)} style={styles.mTrash}>
+                  <Ionicons name="trash-outline" size={20} color="#DC2626" />
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         ))
       )}
+    </View>
+  );
+
+  const DENOMS = [1000, 2000, 5000, 10000, 20000, 50000, 100000];
+  // Quick cash-entry pad: each tap ADDS the denomination; RESET clears to zero.
+  const renderMoneyPad = (value: string, setValue: (s: string) => void) => (
+    <View style={styles.moneyPad}>
+      {DENOMS.map(d => (
+        <TouchableOpacity key={d} style={styles.denomBtn} onPress={() => setValue(String(parseNum(value) + d))}>
+          <Text style={styles.denomText}>{d / 1000}rb</Text>
+        </TouchableOpacity>
+      ))}
+      <TouchableOpacity style={[styles.denomBtn, styles.denomReset]} onPress={() => setValue('0')}>
+        <Text style={styles.denomResetText}>RESET</Text>
+      </TouchableOpacity>
     </View>
   );
 
@@ -534,6 +623,29 @@ export default function UnifiedPOSHub() {
       <View style={styles.receiptDivider} />
 
       <View style={styles.rowBetween}>
+        <Text style={styles.label}>Subtotal</Text>
+        <Text style={[styles.mono, styles.subTotal, { fontSize: 16, fontWeight: '700' }]}>{formatRupiah(subtotal)}</Text>
+      </View>
+
+      <View style={{ marginTop: 12 }}>
+        <TouchableOpacity style={styles.discountToggle} onPress={() => setShowDiscount(v => !v)}>
+          <Text style={styles.label}>Diskon Transaksi</Text>
+          <View style={styles.row}>
+            {txDiscount > 0 && <Text style={[styles.mono, styles.discountAmount]}>− {formatRupiah(txDiscount)}</Text>}
+            <Ionicons name={showDiscount ? 'chevron-up' : 'chevron-down'} size={18} color="#94A3B8" style={{ marginLeft: 8 }} />
+          </View>
+        </TouchableOpacity>
+        {showDiscount && (
+          <View style={{ marginTop: 8 }}>
+            <TextInput style={[styles.mono, styles.input]} keyboardType="numeric" value={discountStr} onChangeText={setDiscountStr} placeholder="0" />
+            {renderMoneyPad(discountStr, setDiscountStr)}
+          </View>
+        )}
+      </View>
+
+      <View style={styles.receiptDivider} />
+
+      <View style={styles.rowBetween}>
         <Text style={styles.totalLabel}>TOTAL</Text>
         <Text style={[styles.mono, styles.grandTotalText]}>{formatRupiah(currentTotal)}</Text>
       </View>
@@ -543,6 +655,7 @@ export default function UnifiedPOSHub() {
           <View>
             <Text style={styles.label}>Uang Muka (DP)</Text>
             <TextInput style={[styles.mono, styles.input]} keyboardType="numeric" value={downPaymentStr} onChangeText={setDownPaymentStr} />
+            {renderMoneyPad(downPaymentStr, setDownPaymentStr)}
             <View style={[styles.rowBetween, { marginTop: 10 }]}>
               <Text style={styles.label}>Sisa Hutang</Text>
               <Text style={[styles.mono, styles.subTotal, { color: '#B45309' }]}>{formatRupiah(remainingBalance)}</Text>
@@ -557,6 +670,7 @@ export default function UnifiedPOSHub() {
                 <Text style={styles.pasText}>PAS</Text>
               </TouchableOpacity>
             </View>
+            {renderMoneyPad(cashReceivedStr, setCashReceivedStr)}
             <View style={[styles.rowBetween, { marginTop: 10 }]}>
               <Text style={styles.label}>Kembalian</Text>
               <Text style={[styles.mono, styles.subTotal, { color: changeAmount < 0 ? '#DC2626' : '#16A34A' }]}>{formatRupiah(changeAmount)}</Text>
@@ -667,22 +781,51 @@ export default function UnifiedPOSHub() {
         <View style={styles.overlay}><View style={styles.modalCard}>
           <Ionicons name="checkmark-circle" size={64} color="#16A34A" />
           <Text style={styles.modalTitle}>Berhasil!</Text>
-          <TouchableOpacity style={[styles.pOption, {backgroundColor: '#DC2626'}]} onPress={() => executePrint('THERMAL')}>
-            <Ionicons name="print" size={20} color="#FFF" style={{marginRight:10}} />
-            <Text style={styles.pOptionText}>STRUK THERMAL</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.pOption, {backgroundColor: '#0F172A'}]} onPress={() => executePrint('FAKTUR')}>
-            <Ionicons name="document-text" size={20} color="#FFF" style={{marginRight:10}} />
-            <Text style={styles.pOptionText}>FAKTUR A5</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.pOption, {backgroundColor: '#16A34A'}]} onPress={() => executePrint('DO')}>
-            <Ionicons name="bus" size={20} color="#FFF" style={{marginRight:10}} />
-            <Text style={styles.pOptionText}>SURAT JALAN</Text>
-          </TouchableOpacity>
+          {([
+            { type: 'THERMAL', color: '#DC2626', icon: 'print', label: 'STRUK THERMAL' },
+            { type: 'FAKTUR', color: '#0F172A', icon: 'document-text', label: 'FAKTUR A5' },
+            { type: 'DO', color: '#16A34A', icon: 'bus', label: 'SURAT JALAN' },
+          ] as { type: DocType; color: string; icon: any; label: string }[]).map((opt) => (
+            <View key={opt.type} style={styles.pRow}>
+              <TouchableOpacity style={[styles.pOption, styles.pOptionFlex, { backgroundColor: opt.color }]} onPress={() => executePrint(opt.type)}>
+                <Ionicons name={opt.icon} size={20} color="#FFF" style={{ marginRight: 10 }} />
+                <Text style={styles.pOptionText}>{opt.label}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.previewBtn} onPress={() => setPreviewType(opt.type)}>
+                <Ionicons name="eye-outline" size={20} color="#0F172A" />
+              </TouchableOpacity>
+            </View>
+          ))}
           <TouchableOpacity onPress={() => setPrintModal(false)} style={styles.closeBtn}>
             <Text style={styles.closeBtnText}>SELESAI</Text>
           </TouchableOpacity>
         </View></View>
+      </Modal>
+
+      <Modal visible={!!previewType} transparent animationType="slide" onRequestClose={() => setPreviewType(null)}>
+        <View style={styles.previewOverlay}>
+          <View style={styles.previewCard}>
+            <View style={styles.previewHeader}>
+              <Text style={styles.previewTitle}>Preview {previewType ? docLabel(previewType) : ''}</Text>
+              <TouchableOpacity onPress={() => setPreviewType(null)} style={styles.iconBtn}>
+                <Ionicons name="close" size={26} color="#0F172A" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.previewBody}>{renderPreviewContent()}</View>
+            <View style={styles.previewActions}>
+              <TouchableOpacity style={styles.previewCancel} onPress={() => setPreviewType(null)}>
+                <Text style={styles.previewCancelText}>TUTUP</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.previewPrint}
+                onPress={() => { const t = previewType; setPreviewType(null); if (t) executePrint(t); }}
+              >
+                <Ionicons name="print" size={18} color="#FFF" style={{ marginRight: 8 }} />
+                <Text style={styles.previewPrintText}>CETAK SEKARANG</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </Modal>
     </View>
   );
@@ -713,25 +856,37 @@ const styles = StyleSheet.create({
   payChipActive: { backgroundColor: '#0F172A', borderColor: '#0F172A' },
   payChipText: { fontSize: 13, fontWeight: '700', color: '#475569' },
   payChipTextActive: { color: '#FFF' },
+  moneyPad: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
+  denomBtn: { flexGrow: 1, flexBasis: '22%', alignItems: 'center', paddingVertical: 10, borderRadius: 8, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#E2E8F0' },
+  denomText: { fontSize: 12, fontWeight: '800', color: '#0F172A' },
+  denomReset: { backgroundColor: '#FEF2F2', borderColor: '#FECACA' },
+  denomResetText: { fontSize: 12, fontWeight: '800', color: '#DC2626' },
+  discountToggle: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4 },
+  discountAmount: { color: '#DC2626', fontWeight: '700', fontSize: 14 },
   tableHead: { flexDirection: 'row', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F1F5F9', marginBottom: 10 },
   th: { fontSize: 10, fontWeight: '800', color: '#94A3B8' },
   tableRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 8 },
-  cellInput: { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 6, padding: 8, fontSize: 13, textAlign: 'center' },
+  cellInput: { minWidth: 0, backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 6, padding: 8, fontSize: 13, textAlign: 'center' },
   cellText: { fontSize: 13, textAlign: 'center', color: '#0F172A' },
   cellTotal: { fontSize: 13, fontWeight: '700', color: '#0F172A', textAlign: 'right' },
+  cellPrice: { fontSize: 13, textAlign: 'right', color: '#0F172A' },
   removeBtn: { width: 30, alignItems: 'center' },
   qtyStepper: { flexDirection: 'row', alignItems: 'center' },
-  stepBtn: { width: 30, height: 38, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 6, justifyContent: 'center', alignItems: 'center' },
-  qtyInput: { flex: 1, backgroundColor: '#F8FAFC', borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#E2E8F0', paddingVertical: 9, fontSize: 14, textAlign: 'center', marginHorizontal: 2, color: '#0F172A' },
-  // Mobile per-item card (stacked layout instead of a cramped table row)
-  mItemCard: { borderWidth: 1, borderColor: '#F1F5F9', borderRadius: 12, padding: 12, marginBottom: 10, backgroundColor: '#FFF' },
-  mItemControls: { flexDirection: 'row', alignItems: 'flex-end', gap: 10, marginTop: 12 },
-  mField: { flex: 1 },
-  mFieldLabel: { fontSize: 9, fontWeight: '800', color: '#94A3B8', marginBottom: 6, letterSpacing: 0.5 },
-  mTrash: { width: 42, height: 38, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FEF2F2', borderRadius: 8 },
-  mItemFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#F1F5F9' },
-  mStock: { fontSize: 12, color: '#64748B', fontWeight: '600' },
-  mTotal: { fontSize: 17, fontWeight: '900', color: '#DC2626' },
+  stepBtn: { width: 36, height: 40, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
+  qtyInput: { flex: 1, minWidth: 0, backgroundColor: '#F8FAFC', borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#E2E8F0', paddingVertical: 10, fontSize: 15, textAlign: 'center', marginHorizontal: 2, color: '#0F172A' },
+  suggestInline: { marginTop: 6, backgroundColor: '#FFF', borderRadius: 8, borderWidth: 1, borderColor: '#E2E8F0', overflow: 'hidden' },
+  // Mobile per-item card (stacked, full-width labeled rows)
+  mItemCard: { borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 14, padding: 14, marginBottom: 12, backgroundColor: '#FFF' },
+  mRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 14 },
+  mRowLabel: { fontSize: 12, fontWeight: '800', color: '#64748B' },
+  mStepper: { width: 150 },
+  mRowInput: { width: 150, backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 8, paddingVertical: 10, paddingHorizontal: 12, fontSize: 15, textAlign: 'center', color: '#0F172A' },
+  mRowValue: { fontSize: 15, fontWeight: '800', color: '#0F172A' },
+  mItemFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#F1F5F9' },
+  mFooterRight: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  mStock: { fontSize: 13, color: '#64748B', fontWeight: '600' },
+  mTotal: { fontSize: 18, fontWeight: '900', color: '#DC2626' },
+  mTrash: { width: 42, height: 40, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FEF2F2', borderRadius: 8 },
   suggestBox: { position: 'absolute', top: 42, left: 0, right: 0, backgroundColor: '#FFF', borderRadius: 8, elevation: 10, zIndex: 1000, borderWidth: 1, borderColor: '#E2E8F0' },
   suggestItem: { padding: 12, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
   receiptCard: { 
@@ -772,7 +927,23 @@ const styles = StyleSheet.create({
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, marginBottom: 20 },
   modalTitle: { fontSize: 20, fontWeight: '900', color: '#0F172A', marginVertical: 10 },
   pOption: { width: '100%', padding: 16, borderRadius: 12, marginBottom: 10, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' },
+  pOptionFlex: { flex: 1, marginBottom: 0 },
   pOptionText: { color: '#FFF', fontWeight: '800', fontSize: 12, letterSpacing: 0.5 },
+  pRow: { flexDirection: 'row', alignItems: 'stretch', gap: 8, width: '100%', marginBottom: 10 },
+  previewBtn: { width: 52, borderRadius: 12, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#E2E8F0', justifyContent: 'center', alignItems: 'center' },
   closeBtn: { marginTop: 15, padding: 10 },
-  closeBtnText: { color: '#94A3B8', fontWeight: '800', letterSpacing: 1.2, fontSize: 12 }
+  closeBtnText: { color: '#94A3B8', fontWeight: '800', letterSpacing: 1.2, fontSize: 12 },
+  // Print preview modal
+  previewOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.85)', justifyContent: 'center', alignItems: 'center', padding: 16 },
+  previewCard: { backgroundColor: '#FFF', borderRadius: 16, width: '92%', maxWidth: 820, height: '88%', padding: 16 },
+  previewHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  previewTitle: { fontSize: 18, fontWeight: '900', color: '#0F172A' },
+  previewBody: { flex: 1, backgroundColor: '#E2E8F0', borderRadius: 10, overflow: 'hidden' },
+  previewEmpty: { color: '#64748B', textAlign: 'center', padding: 30, fontSize: 13 },
+  previewNativeScroll: { padding: 16, alignItems: 'center' },
+  previewActions: { flexDirection: 'row', gap: 10, marginTop: 14 },
+  previewCancel: { paddingVertical: 14, paddingHorizontal: 20, borderRadius: 12, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center' },
+  previewCancelText: { color: '#475569', fontWeight: '800', fontSize: 12, letterSpacing: 0.5 },
+  previewPrint: { flex: 1, flexDirection: 'row', paddingVertical: 14, borderRadius: 12, backgroundColor: '#DC2626', justifyContent: 'center', alignItems: 'center' },
+  previewPrintText: { color: '#FFF', fontWeight: '800', fontSize: 13, letterSpacing: 0.5 }
 });
