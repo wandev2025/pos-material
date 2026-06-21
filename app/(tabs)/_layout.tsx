@@ -13,6 +13,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AccountMenu from '../../components/AccountMenu';
 import PressableScale from '../../components/PressableScale';
 import { useProfile } from '../../lib/ProfileContext';
 import { supabase } from '../../lib/supabase';
@@ -146,23 +147,7 @@ export default function TabLayout() {
 
           {/* Sidebar Footer (User & Logout) */}
           <View style={styles.sidebarFooter}>
-            {!collapsed && (
-              <View style={styles.userBox}>
-                <View style={styles.avatar}>
-                  <Text style={styles.avatarText}>{profile?.full_name?.charAt(0) || 'U'}</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.userName} numberOfLines={1}>
-                    {profile?.full_name || 'User'}
-                  </Text>
-                  <Text style={styles.userRole}>{profile?.role || 'OWNER'}</Text>
-                </View>
-              </View>
-            )}
-            <TouchableOpacity style={[styles.logoutBtn, collapsed && { paddingHorizontal: 0 }]} onPress={handleLogout}>
-              <Feather name="log-out" size={18} color="#DC2626" />
-              {!collapsed && <Text style={styles.logoutText}>Keluar</Text>}
-            </TouchableOpacity>
+            <AccountMenu collapsed={collapsed} />
           </View>
         </View>
 
