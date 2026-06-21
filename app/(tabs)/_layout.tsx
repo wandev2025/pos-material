@@ -1,8 +1,10 @@
 import { Feather } from '@expo/vector-icons';
 import { Tabs, usePathname, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Modal, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import Animated, { FadeIn, FadeOut, LinearTransition, SlideInDown, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import PressableScale from '../../components/PressableScale';
 import { useProfile } from '../../lib/ProfileContext';
 import { supabase } from '../../lib/supabase';
 
@@ -248,6 +250,31 @@ const SECONDARY_NAV = [
   { route: '/(tabs)/retur', path: '/retur', icon: 'corner-up-left', label: 'Retur' },
 ];
 
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+// One primary tab in the pill. The active tab morphs wider to reveal its label —
+// the width tweens via the layout transition while the label cross-fades.
+function TabButton({ item, active, onPress }: { item: any; active: boolean; onPress: () => void }) {
+  const scale = useSharedValue(1);
+  const aStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  return (
+    <AnimatedPressable
+      onPress={onPress}
+      onPressIn={() => { scale.value = withTiming(0.9, { duration: 110 }); }}
+      onPressOut={() => { scale.value = withTiming(1, { duration: 150 }); }}
+      layout={LinearTransition.duration(240)}
+      style={[tabStyles.tab, active && tabStyles.tabActive, aStyle]}
+    >
+      <Feather name={item.icon as any} size={20} color={active ? '#FFF' : '#64748B'} />
+      {active && (
+        <Animated.Text entering={FadeIn.duration(180)} exiting={FadeOut.duration(120)} style={tabStyles.tabLabel} numberOfLines={1}>
+          {item.label}
+        </Animated.Text>
+      )}
+    </AnimatedPressable>
+  );
+}
+
 function FloatingTabBar() {
   const router = useRouter();
   const pathname = usePathname();
@@ -271,24 +298,17 @@ function FloatingTabBar() {
   // same spot to return to the original bar.
   const renderRow = (circle: 'grid' | 'close', wrapStyle: any, pe: 'box-none' | 'auto') => (
     <View style={[wrapStyle, { paddingBottom: Math.max(insets.bottom, 10) }]} pointerEvents={pe}>
-      <View style={tabStyles.pill}>
-        {PRIMARY_NAV.map((item) => {
-          const active = pathname === item.path;
-          return (
-            <TouchableOpacity key={item.path} activeOpacity={0.85} onPress={() => go(item.route)} style={[tabStyles.tab, active && tabStyles.tabActive]}>
-              <Feather name={item.icon as any} size={20} color={active ? '#FFF' : '#64748B'} />
-              {active && <Text style={tabStyles.tabLabel} numberOfLines={1}>{item.label}</Text>}
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-      <TouchableOpacity
-        activeOpacity={0.85}
+      <Animated.View style={tabStyles.pill} layout={LinearTransition.duration(240)}>
+        {PRIMARY_NAV.map((item) => (
+          <TabButton key={item.path} item={item} active={pathname === item.path} onPress={() => go(item.route)} />
+        ))}
+      </Animated.View>
+      <PressableScale
         onPress={() => setMoreOpen(circle === 'grid')}
         style={[tabStyles.circle, (circle === 'close' || onSecondary) && tabStyles.circleActive]}
       >
         <Feather name={circle === 'grid' ? 'grid' : 'x'} size={22} color={(circle === 'close' || onSecondary) ? '#FFF' : '#0F172A'} />
-      </TouchableOpacity>
+      </PressableScale>
     </View>
   );
 
@@ -299,7 +319,7 @@ function FloatingTabBar() {
       <Modal visible={moreOpen} transparent animationType="fade" onRequestClose={() => setMoreOpen(false)}>
         <View style={tabStyles.modalRoot}>
           <TouchableOpacity activeOpacity={1} style={StyleSheet.absoluteFill} onPress={() => setMoreOpen(false)} />
-          <View style={tabStyles.popover}>
+          <Animated.View style={tabStyles.popover} entering={SlideInDown.duration(260)}>
             <TouchableOpacity style={tabStyles.logoutBtn} onPress={logout}>
               <Feather name="log-out" size={18} color="#DC2626" />
               <Text style={tabStyles.logoutText}>Keluar</Text>
@@ -318,7 +338,7 @@ function FloatingTabBar() {
                 );
               })}
             </View>
-          </View>
+          </Animated.View>
           {renderRow('close', tabStyles.barRow, 'auto')}
         </View>
       </Modal>
