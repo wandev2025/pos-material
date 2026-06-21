@@ -21,7 +21,7 @@ import { toast } from '../lib/toast';
 // Vercel-style account switcher pinned to the sidebar bottom: a trigger row that
 // opens a drop-UP menu (Kelola Pengguna · Tambah Staff · Ganti Akun · Keluar).
 export default function AccountMenu({ collapsed }: { collapsed?: boolean }) {
-  const { profile, user } = useProfile() as any;
+  const { profile, user } = useProfile();
   const router = useRouter();
   const isManager = profile?.role === 'OWNER' || profile?.role === 'SUPERADMIN';
 
@@ -238,13 +238,7 @@ function SwitchAccountModal({
                         <Text style={styles.pwBtnText}>Masuk</Text>
                       )}
                     </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={() => {
-                        forgetAccount(a.email);
-                        setAccounts(getRecentAccounts());
-                      }}
-                      style={{ padding: 6 }}
-                    >
+                    <TouchableOpacity onPress={() => setAccounts(forgetAccount(a.email))} style={{ padding: 6 }}>
                       <Feather name="x" size={16} color="#CBD5E1" />
                     </TouchableOpacity>
                   </View>

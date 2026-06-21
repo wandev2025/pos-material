@@ -31,11 +31,6 @@ export default function TabLayout() {
   // Sidebar visibility state (for Web)
   const [collapsed, setCollapsed] = useState(false);
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.replace('/login' as any);
-  };
-
   /**
    * WEB SIDEBAR LAYOUT
    */
@@ -557,36 +552,4 @@ const styles = StyleSheet.create({
 
   // Footer
   sidebarFooter: { marginTop: 'auto', borderTopWidth: 1, borderTopColor: '#F3F4F6', paddingTop: 20 },
-  userBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F9FAFB',
-    padding: 12,
-    borderRadius: 16,
-    marginBottom: 12,
-  },
-  avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: '#DC2626',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  avatarText: { color: '#FFF', fontWeight: 'bold', fontSize: 14 },
-  userName: { fontWeight: '700', color: '#111827', fontSize: 13 },
-  userRole: { fontSize: 9, color: '#6B7280', fontWeight: '800', textTransform: 'uppercase', marginTop: 2 },
-
-  logoutBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#FEE2E2',
-    backgroundColor: '#FFF',
-  },
-  logoutText: { color: '#DC2626', fontWeight: '800', marginLeft: 10, fontSize: 13 },
 });

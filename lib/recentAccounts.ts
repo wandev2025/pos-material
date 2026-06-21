@@ -23,8 +23,9 @@ export function rememberAccount(acc: RecentAccount) {
   window.localStorage.setItem(KEY, JSON.stringify(list.slice(0, 6)));
 }
 
-export function forgetAccount(email: string) {
-  if (!hasLS()) return;
+export function forgetAccount(email: string): RecentAccount[] {
+  if (!hasLS()) return [];
   const list = getRecentAccounts().filter(a => a.email.toLowerCase() !== email.toLowerCase());
   window.localStorage.setItem(KEY, JSON.stringify(list));
+  return list;
 }
