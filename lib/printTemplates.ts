@@ -1,8 +1,23 @@
-const formatRupiah = (n: number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(n || 0);
+const formatRupiah = (n: number) =>
+  new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(n || 0);
+
+// Escape user-provided strings before injecting them into print HTML so that
+// names containing <, >, & or quotes can't break layout or inject markup.
+const esc = (value: any): string =>
+  String(value ?? '').replace(
+    /[&<>"']/g,
+    c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string
+  );
 
 export const generatePrintHtml = (type: 'THERMAL' | 'FAKTUR' | 'DO', settings: any, sale: any, items: any[]) => {
   const shop = settings || { shop_name: 'TOKO', shop_address: '', shop_phone: '' };
-  
+
+  // sale.total_amount is already NET of all discounts. Show a Subtotal/Diskon
+  // breakdown only when a discount was actually applied.
+  const gross = items.reduce((a, i) => a + i.price_at_sale * i.quantity, 0);
+  const totalDiscount = Math.max(0, Math.round(gross - (sale.total_amount || 0)));
+  const hasDiscount = totalDiscount > 0;
+
   // SHARED STYLES (Based on your Component Styles)
   const commonStyles = `
     <style>
@@ -39,29 +54,45 @@ export const generatePrintHtml = (type: 'THERMAL' | 'FAKTUR' | 'DO', settings: a
         <body>
           <div class="thermal-container">
             <div class="text-center">
-              <div class="thermal-brand">${shop.shop_name}</div>
-              <div class="thermal-address">${shop.shop_address}</div>
-              <div class="thermal-address">Telp: ${shop.shop_phone}</div>
+              <div class="thermal-brand">${esc(shop.shop_name)}</div>
+              <div class="thermal-address">${esc(shop.shop_address)}</div>
+              <div class="thermal-address">Telp: ${esc(shop.shop_phone)}</div>
             </div>
             <div class="divider"></div>
             <div style="font-size: 12px; margin-bottom: 5px;">
               No: #${sale.id} | ${new Date(sale.created_at).toLocaleString()}
             </div>
             <table>
-              ${items.map(i => `
+              ${items
+                .map(
+                  i => `
                 <tr>
-                  <td style="font-size: 12px;">${i.quantity}x ${i.item_name}</td>
+                  <td style="font-size: 12px;">${i.quantity}x ${esc(i.item_name)}</td>
                   <td class="text-right" style="font-size: 12px;">${formatRupiah(i.price_at_sale * i.quantity)}</td>
                 </tr>
-              `).join('')}
+              `
+                )
+                .join('')}
             </table>
             <div class="divider"></div>
+            ${
+              hasDiscount
+                ? `
+              <div style="display: flex; justify-content: space-between; font-size: 12px;">
+                <span>Subtotal</span><span>${formatRupiah(gross)}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; font-size: 12px;">
+                <span>Diskon</span><span>- ${formatRupiah(totalDiscount)}</span>
+              </div>
+            `
+                : ''
+            }
             <div style="display: flex; justify-content: space-between; font-weight: bold;">
               <span>TOTAL</span>
               <span>${formatRupiah(sale.total_amount)}</span>
             </div>
             <div class="divider"></div>
-            <div class="text-center italic" style="font-size: 11px;">${shop.thermal_footer}</div>
+            <div class="text-center italic" style="font-size: 11px;">${esc(shop.thermal_footer)}</div>
           </div>
         </body>
       </html>
@@ -79,15 +110,15 @@ export const generatePrintHtml = (type: 'THERMAL' | 'FAKTUR' | 'DO', settings: a
         <div class="dot-matrix" style="border-color: ${themeColor}">
           <div class="doc-header">
             <div>
-              <div style="font-size: 22px; font-weight: 900;">${shop.shop_name}</div>
-              <div style="font-size: 12px;">${shop.shop_address}</div>
-              <div style="font-size: 12px;">WA: ${shop.shop_phone}</div>
+              <div style="font-size: 22px; font-weight: 900;">${esc(shop.shop_name)}</div>
+              <div style="font-size: 12px;">${esc(shop.shop_address)}</div>
+              <div style="font-size: 12px;">WA: ${esc(shop.shop_phone)}</div>
             </div>
             <div class="text-right">
               <div class="doc-type" style="color: ${themeColor}">${title}</div>
               <div style="font-size: 11px; font-weight: bold;">No: ${isDO ? 'DO' : 'INV'}/${sale.id}</div>
               <div style="font-size: 11px;">Tgl: ${new Date(sale.created_at).toLocaleDateString()}</div>
-              <div style="font-size: 11px;">Kepada: ${sale.customer_name}</div>
+              <div style="font-size: 11px;">Kepada: ${esc(sale.customer_name)}</div>
             </div>
           </div>
 
@@ -101,35 +132,59 @@ export const generatePrintHtml = (type: 'THERMAL' | 'FAKTUR' | 'DO', settings: a
               </tr>
             </thead>
             <tbody>
-              ${items.map((i, idx) => `
+              ${items
+                .map(
+                  (i, idx) => `
                 <tr>
                   <td class="text-center">${idx + 1}</td>
-                  <td>${i.item_name}</td>
+                  <td>${esc(i.item_name)}</td>
                   <td class="text-center">${i.quantity}</td>
-                  ${!isDO ? `
+                  ${
+                    !isDO
+                      ? `
                     <td class="text-right">${formatRupiah(i.price_at_sale)}</td>
                     <td class="text-right">${formatRupiah(i.price_at_sale * i.quantity)}</td>
-                  ` : `
+                  `
+                      : `
                     <td class="text-center">-</td>
-                  `}
+                  `
+                  }
                 </tr>
-              `).join('')}
+              `
+                )
+                .join('')}
               <tr style="height: 100px;"><td></td><td></td><td></td>${!isDO ? '<td></td><td></td>' : '<td></td>'}</tr>
             </tbody>
           </table>
 
           <div style="display: flex; margin-top: 15px;">
             <div style="flex: 1.5; font-size: 11px; font-style: italic;">
-              Ket: ${isDO ? shop.do_footer : shop.invoice_footer}
+              Ket: ${esc(isDO ? shop.do_footer : shop.invoice_footer)}
             </div>
-            ${!isDO ? `
+            ${
+              !isDO
+                ? `
               <div style="flex: 1; text-align: right;">
+                ${
+                  hasDiscount
+                    ? `
+                  <div style="display: flex; justify-content: flex-end; gap: 20px; font-size: 12px;">
+                    <span>Subtotal</span><span>${formatRupiah(gross)}</span>
+                  </div>
+                  <div style="display: flex; justify-content: flex-end; gap: 20px; font-size: 12px;">
+                    <span>Diskon</span><span>- ${formatRupiah(totalDiscount)}</span>
+                  </div>
+                `
+                    : ''
+                }
                 <div style="display: flex; justify-content: flex-end; gap: 20px;">
                   <span class="bold">TOTAL</span>
                   <span class="bold" style="font-size: 16px;">${formatRupiah(sale.total_amount)}</span>
                 </div>
               </div>
-            ` : ''}
+            `
+                : ''
+            }
           </div>
 
           <div class="signature-row">

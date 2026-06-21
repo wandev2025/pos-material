@@ -5,6 +5,7 @@
   "dependencies": {
     "@expo/ui": "~56.0.18",
     "@expo/vector-icons": "^15.0.2",
+    "@point-of-sale/receipt-printer-encoder": "^3.0.0",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/datetimepicker": "9.1.0",
     "@react-native-picker/picker": "2.11.4",
@@ -38,16 +39,23 @@
     "react-native-worklets": "0.8.3"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.0",
     "@types/react": "~19.2.2",
     "typescript": "~6.0.3"
   },
   "scripts": {
     "start": "expo start",
-    "reset-project": "node ./scripts/reset-project.js",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "lint:expo": "expo lint",
+    "prepare": "git config core.hooksPath .githooks || true"
   },
-  "private": true
+  "private": true,
+  "overrides": {
+    "uuid": "14.0.1"
+  }
 }

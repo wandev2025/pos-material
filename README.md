@@ -1,56 +1,62 @@
-# Welcome to your Expo app 👋
+# POSMATERIAL
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Point-of-sale + back-office for an Indonesian building-material shop (*toko bangunan*).
+It runs **primarily as a web app** on a Windows + Chrome/Edge counter PC, and builds for
+iOS/Android from the same codebase. All UI copy is in **Bahasa Indonesia**.
 
-## Get started
+## Stack
 
-1. Install dependencies
+- **Expo SDK 56** (React Native 0.85 + `react-native-web`), **expo-router** (file-based, typed routes)
+- **Supabase** (Postgres + Auth) — the anon key is shipped in the client; **RLS** is the security boundary
+- **TypeScript** (strict). State is local React (`useState`/`useMemo`); no global store. React Compiler is on.
+- **Biome** for lint + format (Prettier replacement)
 
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Quick start
 
 ```bash
-npm run reset-project
+npm install
+npm run web        # primary target; localhost is a secure context (needed for WebUSB printing)
+# npm run android | npm run ios   # native builds from the same code
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+No environment setup is required — the Supabase URL and anon key live in `lib/supabase.ts`
+(the anon key is safe to commit; data is protected by RLS).
 
-### Other setup steps
+## Scripts
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+| Command | What |
+|---|---|
+| `npm run web` / `start` / `android` / `ios` | Run the app (Expo) |
+| `npm run lint` | Biome check (lint + format diff) |
+| `npm run lint:fix` | Biome safe fixes + format + organize imports |
+| `npm run format` | Biome format only |
+| `npx tsc --noEmit` | Typecheck — **must be clean** (strict mode) |
 
-## Learn more
+A **pre-commit hook** (`.githooks/pre-commit`) runs `biome check` on staged files and blocks
+commits on errors (warnings are allowed). It's wired via the `prepare` script
+(`git config core.hooksPath .githooks`); bypass once with `git commit --no-verify`.
 
-To learn more about developing your project with Expo, look at the following resources:
+## Database
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+There is **no migration framework**. The schema lives as **idempotent** SQL in `db/*.sql`
+(`create table if not exists`, `add column if not exists`, `create or replace function`,
+`drop policy … / create policy`). Apply changes by pasting a file into
+**Supabase Dashboard → SQL Editor → Run**. After editing any `db/*.sql`, re-run that file.
+Multi-row writes go through atomic Postgres RPCs (`create_sale`, `create_purchase`,
+`record_customer_payment`, `close_cash_session`, `create_return`). See `docs/database.md`.
 
-## Join the community
+## Printing
 
-Join our community of developers creating universal apps.
+Configurable per-document transports: the struk (receipt) prints raw **ESC/POS** over
+**WebUSB/WebSerial** (Chromium + secure context); full-page faktur/DO use the browser's
+kiosk printing. Current hardware: **Bixolon SRP-275III** (impact, 76 mm / 40 col) for the
+struk and **Epson LX-310** (dot-matrix) for faktur/DO — both swappable from Setup → Printer.
+See `docs/printing.md`.
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## Project layout & docs
+
+Routes live in `app/` (`(tabs)/pos.tsx` is the cashier screen); shared code in `lib/`;
+reusable UI in `components/`; hand-applied SQL in `db/`.
+
+- **`AGENTS.md`** — the canonical guide for working in this repo (read first)
+- **`docs/`** — `architecture`, `database`, `features`, `conventions`, `printing`

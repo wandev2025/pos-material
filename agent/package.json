@@ -1,0 +1,18 @@
+{
+  "name": "pos-material-print-agent",
+  "version": "1.0.0",
+  "description": "Local print agent for POS Material - silent thermal (raw ESC/POS), PDF and HTML printing to named Windows printers.",
+  "type": "module",
+  "main": "print-agent.js",
+  "scripts": {
+    "start": "node print-agent.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "pdf-to-printer": "^5.6.0"
+  }
+}

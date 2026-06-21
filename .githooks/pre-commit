@@ -1,0 +1,14 @@
+#!/bin/sh
+# Lint staged files with Biome before each commit.
+# Blocks the commit on errors only (warnings/infos don't block).
+# Bypass when needed with:  git commit --no-verify
+if [ -x node_modules/.bin/biome ]; then
+  node_modules/.bin/biome check --staged --no-errors-on-unmatched || {
+    echo ""
+    echo "✗ Biome found problems in staged files. Fix them, or run 'npm run lint:fix'."
+    echo "  (bypass with: git commit --no-verify)"
+    exit 1
+  }
+else
+  echo "biome not installed — skipping pre-commit lint (run npm install)." >&2
+fi

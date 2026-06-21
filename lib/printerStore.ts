@@ -21,3 +21,32 @@ export const getDefaultPrinter = async (): Promise<PrinterType> => {
   const val = await AsyncStorage.getItem(STORAGE_KEY);
   return (val as PrinterType) || 'NONE';
 };
+
+// --- Paired WebUSB / WebSerial devices (machine-local, NOT shop-wide) ---
+// WebUSB stores the device serialNumber; WebSerial stores "vendorId:productId".
+export type PairedKind = 'WEBUSB' | 'WEBSERIAL';
+
+const pairedKey = (kind: PairedKind) => `@pos_paired_device_${kind}`;
+
+export const savePairedDevice = async (kind: PairedKind, serial: string) => {
+  if (Platform.OS === 'web') {
+    localStorage.setItem(pairedKey(kind), serial);
+  } else {
+    await AsyncStorage.setItem(pairedKey(kind), serial);
+  }
+};
+
+export const getPairedDevice = async (kind: PairedKind): Promise<string | null> => {
+  if (Platform.OS === 'web') {
+    return localStorage.getItem(pairedKey(kind));
+  }
+  return AsyncStorage.getItem(pairedKey(kind));
+};
+
+export const clearPairedDevice = async (kind: PairedKind): Promise<void> => {
+  if (Platform.OS === 'web') {
+    localStorage.removeItem(pairedKey(kind));
+  } else {
+    await AsyncStorage.removeItem(pairedKey(kind));
+  }
+};
