@@ -44,7 +44,32 @@ localhost) and each request is logged to the console.
 | ------ | --------- | ----------- |
 | `GET`  | `/health` | Liveness check. Returns `{ "ok": true }`. |
 | `GET`  | `/list`   | Lists installed printers as `[{ "name": "..." }]` via `pdf-to-printer`. |
+| `GET`  | `/ports`  | Port/device discovery for Setup's detection hint. See below. |
 | `POST` | `/print`  | Prints a document. Body: `{ printer, format, data }`. |
+
+### `GET /ports`
+
+Returns what the OS can actually see, so the app can tell the user whether
+pairing will work **before** they open the browser picker:
+
+```json
+{
+  "serial": [{ "path": "COM3", "vendorId": "1504", "productId": "0011", "manufacturer": "BIXOLON" }],
+  "usb":    [{ "name": "USB Printing Support", "service": "usbprint", "vendorId": "1504", "productId": "0011" }]
+}
+```
+
+- **`serial`** — every serial/COM port, via the `serialport` package
+  (cross-platform). Includes USB-to-serial / virtual-COM devices, with USB
+  vendor/product metadata where available. This is what **WebSerial** can see.
+- **`usb`** — **Windows only**: USB devices bound to the `usbprint` or `WINUSB`
+  driver service (queried from PnP via PowerShell). The `service` field is the
+  diagnosis: `usbprint` = normal Windows printer driver → invisible to
+  WebSerial and **unclaimable by WebUSB** (needs the Zadig/WinUSB swap);
+  `WINUSB` = ready for WebUSB. Empty on macOS/Linux.
+
+The endpoint never 500s — if one half fails it reports `serialError` /
+`usbError` alongside whatever the other half found.
 
 ### `POST /print` formats
 

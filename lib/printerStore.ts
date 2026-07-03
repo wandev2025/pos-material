@@ -22,8 +22,12 @@ export const getDefaultPrinter = async (): Promise<PrinterType> => {
   return (val as PrinterType) || 'NONE';
 };
 
-// --- Paired WebUSB / WebSerial devices (machine-local, NOT shop-wide) ---
+// --- Paired WebUSB / WebSerial devices (local, NOT shop-wide) ---
 // WebUSB stores the device serialNumber; WebSerial stores "vendorId:productId".
+// On web this lives in localStorage, and the matching device-permission grant
+// lives in the browser — BOTH are scoped to the browser profile AND the origin,
+// not the machine. Switching to a --user-data-dir kiosk profile, another
+// browser, or a different URL (localhost → production) requires re-pairing.
 export type PairedKind = 'WEBUSB' | 'WEBSERIAL';
 
 const pairedKey = (kind: PairedKind) => `@pos_paired_device_${kind}`;

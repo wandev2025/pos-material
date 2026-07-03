@@ -9,6 +9,7 @@
 // Endpoints (all CORS-enabled, all logged):
 //   GET  /health -> { ok: true }
 //   GET  /list   -> [{ name }]                    (installed printers)
+//   GET  /ports  -> { serial: [...], usb: [...] } (COM ports + USB printer devices)
 //   POST /print  -> { printer, format, data }     (format: 'raw' | 'pdf' | 'html')
 //
 // Transport contract (see lib/printing/transports/agent.ts):
@@ -61,6 +62,60 @@ function run(cmd, args) {
   });
 }
 
+// Run a child process and resolve with its stdout, reject on non-zero exit.
+function runCapture(cmd, args) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(cmd, args, { windowsHide: true });
+    let stdout = '';
+    let stderr = '';
+    child.stdout?.on('data', d => (stdout += d.toString()));
+    child.stderr?.on('data', d => (stderr += d.toString()));
+    child.on('error', reject);
+    child.on('close', code =>
+      code === 0
+        ? resolve(stdout)
+        : reject(new Error(`${cmd} exited with code ${code}${stderr ? `: ${stderr.trim()}` : ''}`))
+    );
+  });
+}
+
+// Serial/COM ports via the `serialport` package. Imported lazily so an agent
+// installed before this endpoint existed still starts (the route then reports
+// the missing module instead of crashing the whole process).
+let serialPortList = null;
+async function listSerialPorts() {
+  if (!serialPortList) {
+    const mod = await import('serialport');
+    serialPortList = () => mod.SerialPort.list();
+  }
+  return serialPortList();
+}
+
+// USB printer devices (Windows only). serialport can't see raw USB printers —
+// a printer on the normal Windows driver lives under usbprint.sys, not a COM
+// port — so we ask PnP directly. The bound Service is the diagnosis the Setup
+// screen surfaces: 'usbprint' = WebUSB can't claim it (needs the WinUSB swap),
+// 'WINUSB' = ready for WebUSB.
+async function listUsbPrinterDevices() {
+  if (process.platform !== 'win32') return [];
+  const script =
+    "Get-CimInstance Win32_PnPEntity -Filter \"Service='usbprint' OR Service='WINUSB'\" | " +
+    'Select-Object Name,Service,DeviceID | ConvertTo-Json -Compress';
+  const out = (await runCapture('powershell', ['-NoProfile', '-NonInteractive', '-Command', script])).trim();
+  if (!out) return [];
+  let entries = JSON.parse(out);
+  if (!Array.isArray(entries)) entries = [entries]; // single match -> bare object
+  return entries.map(d => {
+    const m = /VID_([0-9A-F]{4})&PID_([0-9A-F]{4})/i.exec(d.DeviceID || '');
+    return {
+      name: d.Name || '',
+      service: d.Service || '',
+      vendorId: m ? m[1].toLowerCase() : undefined,
+      productId: m ? m[2].toLowerCase() : undefined,
+    };
+  });
+}
+
 // Locate a locally installed Chrome or Edge to render HTML -> PDF headlessly.
 function findBrowser() {
   const env = process.env;
@@ -108,6 +163,31 @@ app.get('/list', async (_req, res) => {
     console.error('list error:', e);
     res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
+});
+
+// Port/device discovery for the Setup screen's detection hint. Never 500s —
+// each half reports its own error so partial results still render.
+app.get('/ports', async (_req, res) => {
+  const result = { serial: [], usb: [] };
+  try {
+    const ports = await listSerialPorts();
+    result.serial = (ports || []).map(p => ({
+      path: p.path,
+      vendorId: p.vendorId || undefined,
+      productId: p.productId || undefined,
+      manufacturer: p.manufacturer || undefined,
+    }));
+  } catch (e) {
+    console.error('ports (serial) error:', e);
+    result.serialError = String(e?.message || e);
+  }
+  try {
+    result.usb = await listUsbPrinterDevices();
+  } catch (e) {
+    console.error('ports (usb) error:', e);
+    result.usbError = String(e?.message || e);
+  }
+  res.json(result);
 });
 
 app.post('/print', async (req, res) => {
@@ -194,7 +274,7 @@ async function printHtml(printer, html) {
 
 app.listen(PORT, () => {
   console.log(`POS print agent listening on http://localhost:${PORT}`);
-  console.log('Endpoints: GET /health, GET /list, POST /print');
+  console.log('Endpoints: GET /health, GET /list, GET /ports, POST /print');
   const browser = findBrowser();
   console.log(browser ? `HTML rendering via: ${browser}` : 'WARNING: no Chrome/Edge found (HTML printing disabled).');
 });

@@ -8,7 +8,7 @@
 
 import { Platform } from 'react-native';
 import { getPairedDevice, savePairedDevice } from '../../printerStore';
-import type { DocConfig, PrintJob, Transport } from '../types';
+import type { DocConfig, PairResult, PrintJob, Transport } from '../types';
 
 const BAUD_RATE = 9600;
 
@@ -78,16 +78,47 @@ export const webserialTransport: Transport = {
 };
 
 // Must be invoked from a user gesture: shows the serial-port picker, then stores
-// "vendorId:productId" for silent reconnects later.
-export async function pairWebSerial(): Promise<string | null> {
+// "vendorId:productId" for silent reconnects later. Never throws — every
+// failure mode comes back as a distinct, toastable PairResult.
+export async function pairWebSerial(): Promise<PairResult> {
+  if (Platform.OS !== 'web' || typeof navigator === 'undefined') {
+    return { ok: false, reason: 'unsupported', message: 'Web Serial hanya tersedia di web (Chrome/Edge di PC kasir).' };
+  }
+  if (!(navigator as any).serial) {
+    if (typeof window !== 'undefined' && window.isSecureContext === false) {
+      return {
+        ok: false,
+        reason: 'insecure',
+        message: 'Web Serial butuh koneksi aman: buka lewat https:// atau http://localhost (bukan IP LAN).',
+      };
+    }
+    return {
+      ok: false,
+      reason: 'unsupported',
+      message: 'Browser ini tidak mendukung Web Serial — gunakan Chrome atau Edge.',
+    };
+  }
   try {
-    if (!serialAvailable()) return null;
     const port = await (navigator as any).serial.requestPort();
-    if (!port) return null;
     const id = keyFor(port.getInfo());
     await savePairedDevice('WEBSERIAL', id);
-    return id;
-  } catch {
-    return null;
+    return { ok: true, id };
+  } catch (e: any) {
+    // Chrome throws NotFoundError both when the user cancels and when the list
+    // was empty — an empty list means Windows exposes no COM port for the
+    // printer (USB printer-class device), so say so.
+    if (e?.name === 'NotFoundError') {
+      return {
+        ok: false,
+        reason: 'cancelled',
+        message:
+          'Tidak ada port dipilih. Jika daftarnya kosong: printer tidak terlihat sebagai COM port — pakai kabel serial / mode virtual COM Bixolon, atau ganti metode ke WEBUSB / AGENT.',
+      };
+    }
+    return {
+      ok: false,
+      reason: 'error',
+      message: `Gagal memasang printer (${e?.name ?? 'Error'}): ${e?.message ?? e}`,
+    };
   }
 }

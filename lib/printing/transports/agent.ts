@@ -65,6 +65,54 @@ export async function listAgentPrinters(): Promise<{ name: string }[]> {
   }
 }
 
+// --- port/device discovery (Setup's detection hint) -------------------------
+
+export interface AgentSerialPort {
+  path: string;
+  vendorId?: string;
+  productId?: string;
+  manufacturer?: string;
+}
+
+export interface AgentUsbDevice {
+  name: string;
+  // Windows driver service the device is bound to: 'usbprint' = normal printer
+  // driver (invisible to WebSerial, unclaimable by WebUSB), 'WINUSB' = ready
+  // for WebUSB.
+  service: string;
+  vendorId?: string;
+  productId?: string;
+}
+
+export interface AgentPorts {
+  serial: AgentSerialPort[];
+  usb: AgentUsbDevice[];
+  serialError?: string;
+  usbError?: string;
+}
+
+// Returns null when the agent isn't reachable (vs. reachable-but-empty lists).
+export async function listAgentPorts(): Promise<AgentPorts | null> {
+  const ctrl = new AbortController();
+  // /ports shells out to PowerShell on Windows — allow more than the 800ms ping.
+  const timer = setTimeout(() => ctrl.abort(), 5000);
+  try {
+    const res = await fetch(AGENT_URL + '/ports', { signal: ctrl.signal });
+    if (!res.ok) return null;
+    const data: any = await res.json();
+    return {
+      serial: Array.isArray(data?.serial) ? data.serial : [],
+      usb: Array.isArray(data?.usb) ? data.usb : [],
+      serialError: typeof data?.serialError === 'string' ? data.serialError : undefined,
+      usbError: typeof data?.usbError === 'string' ? data.usbError : undefined,
+    };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export const agentTransport: Transport = {
   id: 'AGENT',
 

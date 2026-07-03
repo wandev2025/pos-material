@@ -57,6 +57,13 @@ export interface Transport {
   print(job: PrintJob): Promise<void>;
 }
 
+// Result of a pairWebSerial / pairWebUsb attempt. `message` is user-facing
+// (Bahasa Indonesia) and names the actual failure so it can be toasted as-is —
+// a cancelled picker, a missing API, and a driver error must read differently.
+export type PairResult =
+  | { ok: true; id: string }
+  | { ok: false; reason: 'unsupported' | 'insecure' | 'cancelled' | 'error'; message: string };
+
 export const AGENT_URL = 'http://localhost:3001';
 
 export const DEFAULT_PRINT_CONFIG: PrintConfig = {

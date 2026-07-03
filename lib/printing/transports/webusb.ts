@@ -7,7 +7,7 @@
 
 import { Platform } from 'react-native';
 import { getPairedDevice, savePairedDevice } from '../../printerStore';
-import type { DocConfig, PrintJob, Transport } from '../types';
+import type { DocConfig, PairResult, PrintJob, Transport } from '../types';
 
 const PRINTER_CLASS = 0x07; // USB base class for printers
 
@@ -86,17 +86,46 @@ export const webusbTransport: Transport = {
 
 // Must be invoked from a user gesture: shows the browser device picker, then
 // stores the device's serial (or "vendor:product") for silent reconnects later.
-export async function pairWebUsb(): Promise<string | null> {
+// Never throws — every failure mode comes back as a distinct, toastable
+// PairResult.
+export async function pairWebUsb(): Promise<PairResult> {
+  if (Platform.OS !== 'web' || typeof navigator === 'undefined') {
+    return { ok: false, reason: 'unsupported', message: 'WebUSB hanya tersedia di web (Chrome/Edge di PC kasir).' };
+  }
+  if (!(navigator as any).usb) {
+    if (typeof window !== 'undefined' && window.isSecureContext === false) {
+      return {
+        ok: false,
+        reason: 'insecure',
+        message: 'WebUSB butuh koneksi aman: buka lewat https:// atau http://localhost (bukan IP LAN).',
+      };
+    }
+    return {
+      ok: false,
+      reason: 'unsupported',
+      message: 'Browser ini tidak mendukung WebUSB — gunakan Chrome atau Edge.',
+    };
+  }
   try {
-    if (!usbAvailable()) return null;
     const device = await (navigator as any).usb.requestDevice({
       filters: [{ classCode: PRINTER_CLASS }],
     });
-    if (!device) return null;
     const id = device.serialNumber || `${device.vendorId}:${device.productId}`;
     await savePairedDevice('WEBUSB', id);
-    return id;
-  } catch {
-    return null;
+    return { ok: true, id };
+  } catch (e: any) {
+    if (e?.name === 'NotFoundError') {
+      return {
+        ok: false,
+        reason: 'cancelled',
+        message:
+          'Tidak ada perangkat dipilih. Jika printer tidak muncul di daftar: di Windows interfacenya harus memakai driver WinUSB (swap dengan Zadig), atau ganti metode ke WEBSERIAL / AGENT.',
+      };
+    }
+    return {
+      ok: false,
+      reason: 'error',
+      message: `Gagal memasang printer (${e?.name ?? 'Error'}): ${e?.message ?? e}`,
+    };
   }
 }

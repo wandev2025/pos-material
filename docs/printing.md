@@ -9,8 +9,9 @@ How the POS prints, why it's built this way, and how to make it print **silently
 - A web page **cannot print silently on its own** — the browser always shows a print dialog. To get one-click printing you must escape that sandbox.
 - The app has a **transport layer**: each document type (struk / faktur / surat jalan) is mapped to a printing **method**, configured per-shop in **Setup → Printer (Hardware)**. If the chosen method isn't available, it automatically falls back down a chain that always ends in the safe browser dialog — so printing **never hard-fails**.
 - For this shop's hardware:
-  - **Struk → Bixolon SRP-275III**: use **WebSerial** (raw ESC/POS straight to the printer → no dialog, ever).
+  - **Struk → Bixolon SRP-275III**: use **WebSerial** (raw ESC/POS straight to the printer → no dialog, ever). ⚠️ WebSerial only sees **COM/serial ports** — a USB-attached SRP-275III on the normal Bixolon printer driver is *not* a COM port and the picker will be **empty**. Use the serial cable / Bixolon's virtual-COM USB mode, or fall back to WEBUSB (WinUSB swap) or AGENT.
   - **Faktur / Surat Jalan → Epson LX-310**: use **Kiosk** + run the browser with `--kiosk-printing` and set the LX-310 as the **default** printer (→ prints instantly to default, no dialog).
+- ⚠️ **Pairing is per browser profile and per URL, not per machine.** Do the pairing **inside the final kiosk-shortcut browser profile, on the final POS URL** — pairing done in your normal browser (or on `localhost` during dev) does not carry over.
 - Everything is a **setting**, not code. Swapping printers or paper size is done entirely in Setup.
 
 ---
@@ -88,8 +89,15 @@ Prints the document HTML through a hidden `<iframe>` and calls `print()`. Withou
 ### KIOSK
 Identical mechanism to DIALOG (hidden iframe → `print()`), but intended to be paired with the browser's `--kiosk-printing` flag so the dialog is skipped and it prints **silently to the default printer**. This is the path for **Faktur / Surat Jalan** on the LX-310.
 
-### WEBSERIAL  ← recommended for the struk
+### WEBSERIAL  ← recommended for the struk *(when the printer is a COM port)*
 Talks to the printer over the Web Serial API (`navigator.serial`) and writes raw ESC/POS bytes directly. **No browser print system involved → no dialog, instant.** On Windows it uses the OS serial/COM driver, so it **avoids the WinUSB driver swap** that WebUSB needs. Identity is keyed by `usbVendorId:usbProductId` (Web Serial exposes no serial number).
+
+**The catch: Web Serial only enumerates serial/COM ports.** A printer plugged in over **USB** with its normal Windows *printer* driver (Bixolon's included) is a USB printer-class device handled by `usbprint.sys` — it is **not a COM port**, so the pairing picker shows an **empty list**. The SRP-275III appears as a COM port only if it is:
+- connected via its **RS-232 serial cable** (the SRP-275III has both USB and serial), or
+- connected via USB with Bixolon's **"Virtual COM (USB2Serial)" mode / VCOM driver** installed, or
+- behind any USB-to-serial adapter the OS gives a COM port.
+
+Check **Device Manager → Ports (COM & LPT)**: if the printer isn't listed there, WebSerial cannot see it — use WEBUSB (with the WinUSB swap) or AGENT instead. (If the local agent is running, Setup does this check for you: the **Port Terdeteksi** hint on the method card lists the COM ports the OS reports, or warns when there are none.)
 
 ### WEBUSB
 Same idea over the WebUSB API (`navigator.usb`), keyed by the device **serial number** (preferred) and reconnected silently via `navigator.usb.getDevices()`. The catch on Windows: WebUSB can only claim a printer if its interface uses the **WinUSB** driver. If Windows loaded the normal printer-class/vendor driver, you must swap it (e.g. with **Zadig**) — which then removes the printer from the normal Windows print spooler. Prefer **WebSerial** unless WebUSB is the only option.
@@ -116,7 +124,11 @@ Configuration lives in two places:
    - `paper`: `58mm | 76mm | 80mm` (THERMAL only) → text columns `32 | 40 | 48`
    - Default (`DEFAULT_PRINT_CONFIG`): struk = `DIALOG`/`76mm`, faktur & DO = `KIOSK`.
 
-2. **Machine-local** → the paired WebUSB/WebSerial device id, stored in `localStorage` via `printerStore`. This is per-computer (the granted device permission lives in the browser), which is correct: different cashier PCs pair their own printers.
+2. **Local** → the paired WebUSB/WebSerial device id, stored in `localStorage` via `printerStore`, alongside the device-permission grant the browser records when you pick the device. **Both are scoped to the browser profile AND the origin (URL)** — not the machine. Consequences:
+   - Different cashier PCs pair their own printers (good — that's the intent).
+   - A browser launched with `--user-data-dir=…` is a **different profile** → it has no pairing. Pair inside it.
+   - Moving from `http://localhost:8081` (dev) to the production URL is a **different origin** → pair again.
+   - Chrome and Edge don't share pairings either.
 
 ### The Setup screen
 
@@ -124,6 +136,7 @@ Configuration lives in two places:
 
 - **Metode** — pick the transport.
 - **Pilih Printer (Agent)** — appears when method is `AGENT`; lists OS printers from the agent.
+- **Port Terdeteksi / Perangkat USB Terdeteksi (via Agent)** — appears when method is `WEBUSB`/`WEBSERIAL` and the local agent is running: shows the COM ports (WEBSERIAL) or USB printer devices + their driver (WEBUSB) the OS can actually see, *before* you try pairing. "Tidak ada COM port" here explains an empty pairing picker; a `usbprint` USB device explains why WebUSB can't claim it. Purely a hint — pairing works without the agent.
 - **Perangkat Terpasang** + **Pasang Printer** / **Lupakan** — appears when method is `WEBUSB`/`WEBSERIAL`; pairs or forgets the device.
 - **Ukuran Kertas** — `58 / 76 / 80 mm` (struk only).
 - **Test Print** — prints a small dummy document through the exact same pipeline.
@@ -172,6 +185,7 @@ Then **always open the POS from this shortcut.**
 
 ### Gotchas
 - **An already-running browser ignores new flags.** If Chrome is already open (same profile), launching the shortcut just opens a tab in the existing, non-kiosk process. The `--user-data-dir` above forces a separate instance so the flag always applies. (Alternatively, fully quit Chrome first.)
+- **A separate profile starts empty.** No logins, no `localStorage`, no device permissions — so any WebSerial/WebUSB pairing done in your normal browser does **not** exist here. Do the pairing (and the Supabase login) from inside this shortcut's window.
 - **It affects every print in that window** — fine for a dedicated POS machine; don't use that shortcut for general browsing.
 - **Secure context** — WebSerial/WebUSB and reliable printing need `https://` (or `http://localhost` in development).
 
@@ -179,20 +193,34 @@ Then **always open the POS from this shortcut.**
 
 ## Recommended setup for this shop (step by step)
 
-1. **Run the migration** `db/migrations/001_print_config.sql` (adds the `print_config` column and seeds defaults).
-2. **Install drivers** on the POS PC: Bixolon driver for the SRP-275III, Epson driver for the LX-310. Set the **LX-310 as the default printer**.
-3. **Struk → WebSerial:** Setup → Printer (Hardware) → **Struk / Thermal** → Metode = **WEBSERIAL** → **Pasang Printer** → choose the SRP-275III → Ukuran Kertas = **76mm** → **Test Print** → **SIMPAN MAPPING**.
-   - (If the SRP-275III isn't exposed as a serial/COM device, use **WEBUSB** instead and do the one-time Zadig WinUSB swap, or use **AGENT**.)
-4. **Faktur & Surat Jalan → Kiosk:** leave Metode = **KIOSK** on both (the default) → **SIMPAN MAPPING**.
-5. **Launch the browser with `--kiosk-printing`** (shortcut above) and open the POS from it.
-6. Done: struk prints raw and instant; faktur/DO print silently to the LX-310. No dialog, single click.
+> **Order matters.** Create and use the kiosk-printing shortcut **first**, and do all pairing from
+> inside it. Pairing is stored per browser profile + URL; a printer paired in your everyday browser
+> simply does not exist in the `--user-data-dir` kiosk profile.
+
+1. **Run** `db/print_settings.sql` (Supabase Dashboard → SQL Editor). Idempotent: creates the
+   `print_settings` table if needed, adds the `print_config` column and seeds defaults.
+2. **Install drivers** on the POS PC: Bixolon driver for the SRP-275III, Epson driver for the
+   LX-310. Set the **LX-310 as the default printer**.
+3. **Decide how the SRP-275III connects** (this decides the struk method):
+   - **Serial/COM path (preferred):** connect the serial cable, or install Bixolon's virtual-COM
+     USB mode. Confirm the printer shows under **Device Manager → Ports (COM & LPT)** → you'll use
+     **WEBSERIAL**.
+   - **No COM port available:** use **WEBUSB** (one-time Zadig WinUSB swap) or **AGENT**.
+4. **Create the kiosk shortcut** (`--kiosk-printing --user-data-dir=…`, see above) and **open the
+   POS from it**. Log in. From now on, always use this shortcut.
+5. **Struk (inside the kiosk browser):** Setup → Printer (Hardware) → **Struk / Thermal** → Metode =
+   **WEBSERIAL** (or the fallback from step 3) → **Pasang Printer** → choose the SRP-275III →
+   Ukuran Kertas = **76mm** → **Test Print** → **SIMPAN MAPPING**.
+6. **Faktur & Surat Jalan:** leave Metode = **KIOSK** on both (the default) → **SIMPAN MAPPING**.
+7. Done: struk prints raw and instant; faktur/DO print silently to the LX-310. No dialog, single click.
 
 ---
 
 ## Pairing & silent reconnect
 
-- **Pairing** (one-time per machine) must happen from a button press (browser requirement) — that's the **Pasang Printer** button. It shows the OS device/port picker; you choose the printer once.
+- **Pairing** must happen from a button press (browser requirement) — that's the **Pasang Printer** button. It shows the OS device/port picker; you choose the printer once.
 - The chosen device id is stored locally. On every later print, the transport **reconnects silently** (`navigator.usb.getDevices()` / `navigator.serial.getPorts()`) with **no picker** — this is the "recognise the device and print straight away" behaviour.
+- **Pairing is scoped to the browser profile + origin**, because both halves of it live in the browser: the device id in `localStorage`, the permission grant in the profile's site settings. Pair once **per profile per URL** — concretely: inside the kiosk shortcut's profile, on the production URL. Switching profile, browser, or URL means pairing again (30 seconds, one time).
 - **Forget** (Lupakan) clears the stored id so you can pair a different unit — this is how you swap hardware.
 - **Browser support:** WebSerial/WebUSB are **Chromium-only** (Chrome / Edge). Not Safari, not Firefox. They also require a **secure context** (`https://` or `localhost`).
 
@@ -222,6 +250,7 @@ Folder: `agent/`. A small Node + Express server on `http://localhost:3001`.
 |---|---|
 | `GET /health` | liveness check used by Setup's status indicator |
 | `GET /list` | enumerate OS printers (for the AGENT printer chooser) |
+| `GET /ports` | enumerate serial/COM ports (`serialport`) + Windows USB printer devices with their bound driver (`usbprint` vs `WINUSB`) — powers Setup's detection hint |
 | `POST /print` | `{ printer, format, data }` — `format`: `raw` (base64 ESC/POS) / `pdf` (base64) / `html` (rendered to PDF via headless Chrome, then printed) |
 
 Run it on the POS PC:
@@ -259,7 +288,7 @@ The preview has a **Cetak Sekarang** button that prints through the same `printD
 | `app/(tabs)/setup.tsx` | the Printer (Hardware) configuration UI |
 | `app/(tabs)/pos.tsx` | calls `printDocument`; print modal + preview |
 | `components/PrintPreviews.tsx` | native preview components |
-| `db/migrations/001_print_config.sql` | adds `print_config jsonb` + seeds defaults |
+| `db/print_settings.sql` | `print_settings` table + `print_config jsonb` + seeded defaults |
 | `agent/` | optional local print server |
 
 ---
@@ -269,7 +298,9 @@ The preview has a **Cetak Sekarang** button that prints through the same `printD
 - **Still getting the browser Print dialog for the struk** → the struk is still on `DIALOG`. Set it to **WEBSERIAL** and pair (Setup → Printer (Hardware)).
 - **Dialog still shows for Faktur/DO** → the browser isn't running with `--kiosk-printing`, or another (non-kiosk) browser instance was already open. Launch via the dedicated `--user-data-dir` shortcut.
 - **Kiosk prints to the wrong printer** → kiosk always uses the **system default**; set the LX-310 as default and disable "Let Windows manage my default printer".
-- **"Pemasangan dibatalkan atau tidak didukung"** when pairing → you're not on Chrome/Edge, or not on `https://`/`localhost`, or you cancelled the picker.
+- **The WebSerial picker is empty / printer "not detected"** → Windows exposes no COM port for it. A USB printer on the normal printer driver is **not** a serial device. Check Device Manager → Ports (COM & LPT); use the serial cable / Bixolon virtual-COM mode, or switch to WEBUSB/AGENT. (The pairing toast now says exactly this.)
+- **Paired before, but now "Belum ada perangkat" / falls back to dialog** → you're in a different browser profile or on a different URL than where you paired (typical after switching to the `--user-data-dir` kiosk shortcut, or from `localhost` to production). Pairing is profile+origin-local — re-pair from inside the browser/URL you actually use at the counter.
+- **Pairing fails with a toast** → the toast now reports the real cause: unsupported browser (need Chrome/Edge), insecure context (need `https://` or `localhost` — a LAN IP over `http://` won't work), cancelled/empty picker, or the underlying browser error (name + message) for anything else.
 - **WebUSB can't claim the printer (Windows)** → the printer is on the vendor/printer-class driver; switch to **WebSerial**, or do the WinUSB (Zadig) swap, or use the **Agent**.
 - **Receipt text wraps / misaligned** → wrong **Ukuran Kertas**; the SRP-275III is **76mm (40 columns)**.
 - **Safari / Firefox** → no WebSerial/WebUSB; those transports fall back to KIOSK/DIALOG. Use Chrome/Edge on the POS.

@@ -74,7 +74,8 @@ export async function printDocument(args: {
 // Exposed for print previews — exactly the HTML that DIALOG/KIOSK/AGENT print.
 export { generatePrintHtml } from '../printTemplates';
 export { buildThermalEscPos } from './escpos';
-export { listAgentPrinters, pingAgent } from './transports/agent';
+export type { AgentPorts, AgentSerialPort, AgentUsbDevice } from './transports/agent';
+export { listAgentPorts, listAgentPrinters, pingAgent } from './transports/agent';
 // Robust hidden-iframe printer (reused by screens that print custom HTML, e.g.
 // the customer statement) — never popup-blocked, silent under --kiosk-printing.
 export { printHtmlViaIframe } from './transports/iframePrint';

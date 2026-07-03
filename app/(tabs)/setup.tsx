@@ -1,5 +1,5 @@
 import { Feather } from '@expo/vector-icons';
-import { useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -13,9 +13,10 @@ import {
 } from 'react-native';
 import { useProfile } from '@/lib/ProfileContext';
 import { clearPairedDevice, getPairedDevice } from '@/lib/printerStore';
-import type { DocConfig, DocType, PaperProfile, PrintConfig, TransportId } from '@/lib/printing';
+import type { AgentPorts, DocConfig, DocType, PaperProfile, PrintConfig, TransportId } from '@/lib/printing';
 import {
   DEFAULT_PRINT_CONFIG,
+  listAgentPorts,
   listAgentPrinters,
   pairWebSerial,
   pairWebUsb,
@@ -77,11 +78,16 @@ export default function SetupScreen() {
     print_config: cloneDefaultConfig(),
   });
 
-  // Machine-local paired WebUSB / WebSerial devices (for display + forget).
+  // Profile-local paired WebUSB / WebSerial devices (for display + forget).
   const [pairedDevices, setPairedDevices] = useState<{ WEBUSB: string | null; WEBSERIAL: string | null }>({
     WEBUSB: null,
     WEBSERIAL: null,
   });
+
+  // COM-port / USB-device discovery via the local agent's /ports endpoint —
+  // tells the user whether the printer is even visible BEFORE they try pairing.
+  const [agentPorts, setAgentPorts] = useState<AgentPorts | null>(null);
+  const [portsStatus, setPortsStatus] = useState<'IDLE' | 'CHECKING' | 'OFFLINE' | 'OK'>('IDLE');
 
   // The local agent is only relevant when a document is mapped to it.
   const usesAgent = useMemo(
@@ -111,6 +117,12 @@ export default function SetupScreen() {
     const interval = setInterval(checkBridge, 8000);
     return () => clearInterval(interval);
   }, [profile, activeTab, usesAgent]);
+
+  // One-shot port detection when the Printers tab opens (a single sub-second
+  // request, cheap even when the agent isn't running). Refreshable by button.
+  useEffect(() => {
+    if (atLeast(profile?.role, 'ADMIN') && activeTab === 'PRINTERS') detectPorts();
+  }, [profile, activeTab]);
 
   const loadAllData = async () => {
     setLoading(true);
@@ -152,6 +164,13 @@ export default function SetupScreen() {
     setPairedDevices({ WEBUSB: usb, WEBSERIAL: serial });
   };
 
+  const detectPorts = async () => {
+    setPortsStatus('CHECKING');
+    const ports = await listAgentPorts();
+    setAgentPorts(ports);
+    setPortsStatus(ports ? 'OK' : 'OFFLINE');
+  };
+
   // Updates one document's transport / printer / paper inside print_config.
   const updateDocConfig = (doc: DocType, patch: Partial<DocConfig>) => {
     setSettings(prev => {
@@ -162,9 +181,9 @@ export default function SetupScreen() {
 
   // Pair / forget must run from a real user gesture (handled by the button onPress).
   const handlePair = async (kind: 'WEBUSB' | 'WEBSERIAL') => {
-    const serial = kind === 'WEBUSB' ? await pairWebUsb() : await pairWebSerial();
-    if (serial) toast.success(`Printer terhubung: ${serial}`);
-    else toast.error('Pemasangan dibatalkan atau tidak didukung di perangkat ini (butuh Chrome/Edge).');
+    const result = kind === 'WEBUSB' ? await pairWebUsb() : await pairWebSerial();
+    if (result.ok) toast.success(`Printer terhubung: ${result.id}`);
+    else toast.error(result.message);
     refreshPaired();
   };
 
@@ -242,6 +261,83 @@ node -e "const express=require('express');const cors=require('cors');const ptp=r
     }
   };
 
+  // What the OS can actually see, shown before the user tries pairing: COM
+  // ports for WEBSERIAL, USB printer devices (+ their driver) for WEBUSB.
+  // Needs the local agent — the browser itself cannot enumerate silently.
+  const renderPortHint = (kind: 'WEBUSB' | 'WEBSERIAL') => {
+    let body: ReactNode;
+    if (portsStatus === 'CHECKING') {
+      body = <Text style={styles.hintMuted}>Memeriksa…</Text>;
+    } else if (portsStatus !== 'OK' || !agentPorts) {
+      body = (
+        <Text style={styles.hintMuted}>
+          Agent lokal tidak berjalan — deteksi otomatis butuh agent/ (npm start). Pemasangan manual tetap bisa lewat
+          tombol Pasang Printer.
+        </Text>
+      );
+    } else if (kind === 'WEBSERIAL') {
+      if (agentPorts.serialError) {
+        body = (
+          <Text style={styles.hintWarn}>
+            Agent tidak bisa membaca daftar port: {agentPorts.serialError} (jalankan npm install di folder agent/).
+          </Text>
+        );
+      } else if (agentPorts.serial.length === 0) {
+        body = (
+          <Text style={styles.hintWarn}>
+            Tidak ada COM port terdeteksi. Printer USB dengan driver printer Windows tidak muncul sebagai COM port —
+            pakai kabel serial / mode virtual-COM Bixolon, atau ganti metode ke WEBUSB / AGENT.
+          </Text>
+        );
+      } else {
+        body = agentPorts.serial.map(p => (
+          <Text key={p.path} style={styles.hintOk}>
+            {p.path}
+            {p.manufacturer ? ` · ${p.manufacturer}` : ''}
+            {p.vendorId ? ` (${p.vendorId}:${p.productId ?? '?'})` : ''}
+          </Text>
+        ));
+      }
+    } else if (agentPorts.usb.length === 0) {
+      body = (
+        <Text style={styles.hintMuted}>
+          Tidak ada perangkat printer USB terdeteksi (deteksi USB hanya berjalan di Windows).
+          {agentPorts.usbError ? ` Error: ${agentPorts.usbError}` : ''}
+        </Text>
+      );
+    } else {
+      body = agentPorts.usb.map(d => {
+        const winusb = /winusb/i.test(d.service);
+        return (
+          <Text
+            key={`${d.vendorId ?? ''}:${d.productId ?? ''}:${d.name}`}
+            style={winusb ? styles.hintOk : styles.hintWarn}
+          >
+            {d.name}
+            {d.vendorId ? ` (${d.vendorId}:${d.productId ?? '?'})` : ''} —{' '}
+            {winusb
+              ? 'driver WinUSB: siap dipasang lewat WebUSB'
+              : 'driver printer Windows (usbprint): WebUSB tidak bisa claim — swap ke WinUSB (Zadig), atau pakai WEBSERIAL / AGENT'}
+          </Text>
+        );
+      });
+    }
+
+    return (
+      <View style={{ marginBottom: 16 }}>
+        <View style={[styles.row, { alignItems: 'center', gap: 8 }]}>
+          <Text style={styles.label}>
+            {kind === 'WEBSERIAL' ? 'Port Terdeteksi (via Agent)' : 'Perangkat USB Terdeteksi (via Agent)'}
+          </Text>
+          <TouchableOpacity onPress={detectPorts} disabled={portsStatus === 'CHECKING'}>
+            <Feather name="refresh-cw" size={12} color="#64748B" />
+          </TouchableOpacity>
+        </View>
+        {body}
+      </View>
+    );
+  };
+
   // One fully-editable config row per document type. Swapping printer / paper /
   // transport here writes to print_settings.print_config — no code change needed.
   const renderDocConfig = (doc: DocType, title: string, allowPaper: boolean) => {
@@ -276,6 +372,8 @@ node -e "const express=require('express');const cors=require('cors');const ptp=r
             onSelect={(name: string) => updateDocConfig(doc, { printer: name })}
           />
         )}
+
+        {isPaired && renderPortHint(cfg.transport as 'WEBUSB' | 'WEBSERIAL')}
 
         {isPaired && (
           <View style={{ marginBottom: 16 }}>
@@ -594,6 +692,9 @@ const styles = StyleSheet.create({
   },
   docTitle: { fontSize: 14, fontWeight: '800', color: '#1E293B', marginBottom: 14 },
   pairedText: { fontSize: 13, fontWeight: '600', color: '#334155', marginTop: 4, marginBottom: 10 },
+  hintMuted: { fontSize: 12, color: '#94A3B8', marginTop: 4 },
+  hintOk: { fontSize: 12, fontWeight: '600', color: '#059669', marginTop: 4 },
+  hintWarn: { fontSize: 12, color: '#B45309', marginTop: 4 },
   pairBtn: {
     backgroundColor: '#1E293B',
     flexDirection: 'row',

@@ -22,10 +22,12 @@ Every file is safe to re-run: `create table if not exists`, `alter table … add
 | `db/roles.sql` | `handle_new_user` trigger (first user = SUPERADMIN, rest STAFF), `current_user_role()` helper, and `profiles` RLS policies. |
 | `db/atomic_pos.sql` | Core POS columns + the atomic sale RPCs: `create_sale`, `update_sale`, `delete_sale`. Also the `allow_preorder`, `discount`, and `customer_id` columns. |
 | `db/business_features.sql` | Suppliers, purchasing, customers/piutang, cash sessions, returns — tables + RPCs (`create_purchase`, `record_customer_payment`, `open_cash_session`, `close_cash_session`, `create_return`). |
+| `db/print_settings.sql` | The single-row `print_settings` table (shop profile, footers, `print_config` jsonb) + RLS + seeded defaults. |
 
 > A `db/migrations/` folder briefly existed for the printing `print_config` column; those files were
-> applied and then deleted by the owner. The convention going forward is **one idempotent feature
-> file**, not numbered migrations.
+> applied and then deleted by the owner. Their content (plus the table DDL, which had only ever
+> existed in the live database) now lives in `db/print_settings.sql`. The convention going forward
+> is **one idempotent feature file**, not numbered migrations.
 
 To verify a live function matches the repo without re-running, read its source from the catalog, e.g.
 `select pg_get_functiondef('create_return'::regproc);` in the SQL Editor.
@@ -45,7 +47,7 @@ Core (pre-existing):
 - **`payment_methods`** — `id`, `name`. **Name is load-bearing** (see below).
 - **`metrics`** — `id`, `unit_name` (Pcs/Sak/Batang/…).
 - **`print_settings`** — single row `id = 1`; shop profile, footers, and `print_config` (jsonb,
-  per-document transport map). See [printing.md](printing.md).
+  per-document transport map). DDL in `db/print_settings.sql`. See [printing.md](printing.md).
 
 Business features (`db/business_features.sql`):
 
