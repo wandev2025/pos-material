@@ -47,6 +47,8 @@ export interface SaleLike {
   id: number;
   total_amount: number;
   customer_name: string;
+  customer_address?: string; 
+  customer_phone?: string;  
   created_at: string;
 
   payment_method?: string;
@@ -91,16 +93,6 @@ export const AGENT_URL = 'http://localhost:3001';
 |--------------------------------------------------------------------------
 | Default configuration
 |--------------------------------------------------------------------------
-|
-| THERMAL
-|   → Epson TM-U220 (WebSerial)
-|
-| FAKTUR
-|   → Epson LX-310 (Chrome/Edge kiosk printing)
-|
-| DO
-|   → Epson LX-310 (Chrome/Edge kiosk printing)
-|
 */
 
 export const DEFAULT_PRINT_CONFIG: PrintConfig = {
@@ -117,29 +109,6 @@ export const DEFAULT_PRINT_CONFIG: PrintConfig = {
     transport: 'KIOSK',
   },
 };
-
-/*
-|--------------------------------------------------------------------------
-| Transport fallback order
-|--------------------------------------------------------------------------
-|
-| THERMAL:
-|   WebSerial
-|      ↓
-|   WebUSB
-|      ↓
-|   Agent
-|      ↓
-|   Kiosk
-|      ↓
-|   Dialog
-|
-| Faktur / DO:
-|   Kiosk
-|      ↓
-|   Dialog
-|
-*/
 
 export const FALLBACK_CHAINS: Record<DocType, TransportId[]> = {
   THERMAL: [
@@ -172,3 +141,35 @@ export const PAPER_COLUMNS: Record<PaperProfile, number> = {
   '76mm': 42,
   '80mm': 48,
 };
+
+/*
+|--------------------------------------------------------------------------
+| Paper profile validation
+|--------------------------------------------------------------------------
+|
+| A `PaperProfile` type only exists at compile time. Settings loaded from
+| storage/DB/older config versions are untyped at the boundary, so a stale
+| value (e.g. '74mm' from a renamed profile) sails through any `as
+| PaperProfile` cast unchecked and only fails — or worse, silently falls
+| back — deep inside whichever function does the lookup.
+|
+| Every place that turns "a paper value from settings" into a real
+| PaperProfile should go through resolvePaperProfile() instead of casting,
+| so there's exactly one definition of "valid" and one place that logs
+| when it isn't.
+|
+*/
+
+export function isPaperProfile(value: unknown): value is PaperProfile {
+  return value === '58mm' || value === '76mm' || value === '80mm';
+}
+
+export function resolvePaperProfile(value: unknown, context: string): PaperProfile {
+  if (isPaperProfile(value)) return value;
+  if (value !== undefined && value !== null && value !== '') {
+    console.warn(
+      `[printing] Invalid paper profile "${String(value)}" for ${context} — falling back to '76mm'.`
+    );
+  }
+  return '76mm';
+}

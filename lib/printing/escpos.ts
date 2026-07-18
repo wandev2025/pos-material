@@ -1,47 +1,42 @@
-// lib/printing/escpos.ts
-// Builds raw ESC/POS bytes for a thermal receipt at the configured paper width
-// (58 / 76 / 80 mm). The encoder package is browser/Chromium oriented and may
-// not be installed, so it is imported lazily and any failure resolves to `null`
-// (callers then fall back to an HTML transport).
-
 import type { PaperProfile, SaleItemLike, SaleLike, ShopSettings } from './types';
-import { PAPER_COLUMNS } from './types';
+import { PAPER_COLUMNS, resolvePaperProfile } from './types';
 
 const formatRupiah = (n: number) =>
   new Intl.NumberFormat('id-ID', {
     style: 'currency',
     currency: 'IDR',
     minimumFractionDigits: 0,
-  }).format(n || 0);
+  }).format(n || 0).replace(/\u00A0/g, ' ');
+
+const SIDE_MARGIN_COLUMNS = 1;
 
 export async function buildThermalEscPos(
   settings: ShopSettings,
   sale: SaleLike,
   items: SaleItemLike[],
-  paper: PaperProfile = '80mm'
+  paper: PaperProfile = '76mm'
 ): Promise<Uint8Array | null> {
- let ReceiptPrinterEncoder: any;
+  let ReceiptPrinterEncoder: any;
   try {
     const mod: any = await import('@point-of-sale/receipt-printer-encoder');
     ReceiptPrinterEncoder = mod?.default ?? mod;
-    if (!ReceiptPrinterEncoder) {
-      console.error('ESC/POS: encoder module resolved but has no default export', mod);
-      return null;
-    }
   } catch (err) {
     console.error('ESC/POS: failed to import encoder package:', err);
     return null;
   }
 
   try {
-    // Columns follow the paper profile (58mm=32, 76mm=40, 80mm=48) — never
-    // hardcoded — so swapping paper/printer in Setup needs no code change.
-    const columns = PAPER_COLUMNS[paper];
-    const priceWidth = paper === '58mm' ? 10 : 12;
-    const marginRight = 2;
-    const nameWidth = Math.max(8, columns - priceWidth - marginRight);
+    const resolvedPaper = resolvePaperProfile(paper, 'buildThermalEscPos');
+    const rawColumns = PAPER_COLUMNS[resolvedPaper];
 
-    const encoder = new ReceiptPrinterEncoder({ columns, language: 'esc-pos' });
+    // FIX: Use rawColumns here (42), not the subtracted value (40)
+    const encoder = new ReceiptPrinterEncoder({ columns: rawColumns, language: 'esc-pos' });
+
+    // Use usableColumns for layout calculations only
+    const usableColumns = rawColumns - (SIDE_MARGIN_COLUMNS * 2);
+    const priceWidth = resolvedPaper === '58mm' ? 10 : 12;
+    const marginRight = 2;
+    const nameWidth = Math.max(8, usableColumns - priceWidth - marginRight);
 
     let chain = encoder
       .initialize()
@@ -53,13 +48,11 @@ export async function buildThermalEscPos(
       .bold(false);
 
     if (settings.shop_address) {
-      chain = chain.font('B').line(settings.shop_address).font('A');
+      chain = chain.font('B').bold(true).line(settings.shop_address).bold(false).font('A');
     }
+    
     if (settings.shop_phone) {
-      chain = chain
-        .font('B')
-        .line('Telp: ' + settings.shop_phone)
-        .font('A');
+      chain = chain.font('B').bold(true).line('Telp: ' + settings.shop_phone).bold(false).font('A');
     }
 
     const columnsDef = [
@@ -70,6 +63,8 @@ export async function buildThermalEscPos(
     chain = chain
       .align('left')
       .rule({ style: 'single' })
+      // Apply manual padding by adding spaces to the table if needed, 
+      // or simply rely on the width calculations above.
       .table(
         columnsDef,
         items.map(i => [`${i.quantity}x ${i.item_name}`, formatRupiah(i.price_at_sale * i.quantity)])
@@ -83,10 +78,10 @@ export async function buildThermalEscPos(
       ]);
 
     if (settings.thermal_footer) {
-      chain = chain.newline().align('center').italic(true).line(settings.thermal_footer).italic(false);
+      chain = chain.newline().align('center').bold(true).line(settings.thermal_footer).bold(false);
     }
 
-return chain.newline(2).cut().encode() as Uint8Array;
+    return chain.newline(2).cut().encode() as Uint8Array;
   } catch (err) {
     console.error('ESC/POS: failed while building/encoding receipt:', err);
     return null;

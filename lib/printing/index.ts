@@ -43,8 +43,14 @@ export async function printDocument(args: {
   // avoids loading the encoder for HTML-only paths (DIALOG/KIOSK).
   const needsEscpos =
     docType === 'THERMAL' && order.some(id => id === 'WEBUSB' || id === 'WEBSERIAL' || id === 'AGENT');
-  const escpos = needsEscpos ? await buildThermalEscPos(settings, sale, items, cfg.paper || '80mm') : null;
-
+  const escpos = needsEscpos
+  ? await buildThermalEscPos(
+      settings,
+      sale,
+      items,
+      cfg.paper ?? '76mm'
+    )
+  : null;
   const tried: TransportId[] = [];
 
   for (const id of order) {

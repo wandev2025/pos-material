@@ -43,9 +43,11 @@ async function findPairedPort(): Promise<any | null> {
     }
   }
 
+  // Never automatically choose a port.
   if (ports.length === 1) {
-    console.log('Using only granted port.');
-    return ports[0];
+    console.warn(
+      'One serial port is available, but it is not the paired printer.'
+    );
   }
 
   return null;
